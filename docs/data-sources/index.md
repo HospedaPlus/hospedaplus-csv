@@ -37,38 +37,8 @@ Within this topology, **F1** and **F4** serve as the foundational file-based inp
 | **Country Seasons & Pricing (`RN-05`, `RN-06`)** | Per-country `MM-DD` ranges for `HIGH` (`1.25x`), `MID` (`1.00x`), and `LOW` (`0.85x`); `event_multiplier = 1.15x`; `pickup` (`14d` window, `±15%` threshold → `1.10x` / `0.92x`) | Used by `buenavista_csv.f1_audit` to classify F1 historical bookings into Portugal (`PT`) seasonal buckets and by Spark Silver/Gold for dynamic pricing. | 
 
 ### End-to-End Data Flow across the Medallion Architecture
-```mermaid
-flowchart TD
-    A["1. Sources & Shared Catalog<br/>(buenavista-csv — Catalog v1.1.0)<br/><br/>• F1: data/f1_historical/hotel_bookings.csv<br/>119,390 rows → mapped to HP-PT-001 & HP-PT-002<br/><br/>• F4: output/f4_agency_files/*_week.csv<br/>15 weekly agency CSVs, AG01..AG15, Layouts A & B<br/><br/>• Contract: schemas/catalog.json<br/>28 HP-XX-NNN hotels, 4,000 rooms, 5 currencies, RN-05 rules"]
 
-    B["2. Batch Orchestration & Quality Gate<br/>(VPC Private Subnet - EC2 t3.large + Celery)<br/><br/>• Apache Airflow Scheduler dispatches tasks via RabbitMQ<br/>(vhost: 'airflow') to Celery Workers<br/><br/>• Pre-ingestion Quality Gate (buenavista_csv.validator)<br/>validates F1 & F4 against catalog.json v1.1.0,<br/>emitting quality_validation_report.json non-destructively (US-6)"]
-
-    C["3. Data Lake Landing — Amazon S3 Bronze<br/>(Raw Immutable Zone)<br/><br/>• s3://hospedaplus-datalake-bronze/f1_historical/<br/>load_date=YYYY-MM-DD/hotel_bookings.csv<br/><br/>• s3://hospedaplus-datalake-bronze/f4_agencies/<br/>year=YYYY/week=WW/&lt;agency_slug&gt;_week.csv<br/><br/>• Cost Optimization: S3 Lifecycle rule transitions<br/>Bronze objects to Standard-IA after 30 days"]
-
-    D["4. Distributed Processing — Apache Spark on AWS ECS Fargate Spot<br/>(Bronze → Silver → Gold)<br/><br/><b>Bronze → Silver (Cleaned & Conformed Parquet):</b><br/>- Enforces explicit PySpark StructType schemas (Topic 13 — no schema inference)<br/>- Maps F1 'City Hotel' → HP-PT-001 and 'Resort Hotel' → HP-PT-002 (EUR)<br/>- Converts F1 literal 'NULL'/'NA' strings to typed nulls (agent, company)<br/>- Filters/quarantines F1 negative ADR (-$6.38), Giant Outlier ($5,400.00), & 0-guest rows<br/>- Unifies F4 Layout A and Layout B into the canonical reservation structure<br/>- Imputes missing F4 currencies (Defect 3) from hotels[].currency in catalog.json<br/>and converts all amounts to reporting_currency = 'COP' using F7 exchange rates<br/>- Deduplicates F4 (AG01..AG15, 10%) vs. F2 (18%) & F3 (0%) within +/-1 day check-in,<br/>retaining the lowest-commission channel (RN-08, CA-06)<br/>- Pseudonymizes guest_name/guest_full_name via SHA-256 salted hashing (RN-11, CA-10)<br/><br/><b>Silver → Gold (Dimensional Star Schema in S3 Parquet):</b><br/>- Populates fact_reservations, fact_daily_revenue, dim_hotel, dim_channel,<br/>dim_room_type, and dim_date partitioned by hotel_id and year_month"]
-
-    E["5A. Analytics & BI (Serving Layer)<br/><br/>• AWS Glue Crawler updates Glue Data Catalog<br/>• Amazon Athena runs serverless SQL over Gold<br/>• Power BI / QuickSight dashboards consume<br/>KPIs in COP for Revenue Managers & GMs"]
-
-    F["5B. Operational Feedback Loop (Before 06:00)<br/><br/>• Daily suggested prices (RN-05, RN-06) and<br/>overbooking limits (RN-03) are written back<br/>to RDS PostgreSQL Multi-AZ so FastAPI<br/>serves updated rates in &lt;250 ms (RNF-01)"]
-
-    A --> B --> C --> D
-    D --> E
-    D --> F
-
-    classDef sources fill:#E6F1FB,stroke:#185FA5,color:#042C53
-    classDef batch fill:#EEEDFE,stroke:#534AB7,color:#26215C
-    classDef lake fill:#FAEEDA,stroke:#854F0B,color:#412402
-    classDef spark fill:#E1F5EE,stroke:#0F6E56,color:#04342C
-    classDef serving fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
-    classDef feedback fill:#EAF3DE,stroke:#3B6D11,color:#173404
-
-    class A sources
-    class B batch
-    class C lake
-    class D spark
-    class E serving
-    class F feedback
-```
+<img width="1536" height="1024" alt="CSV-Arquitecture" src="https://github.com/user-attachments/assets/3626d21d-4a87-4049-9fcd-dae6559fc2db" />
 
 
 ## 2. Source F1: Hotel Booking Demand (`hotel_bookings.csv`) Profiles Historical Seasonality and Cancellation Risk
