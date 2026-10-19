@@ -1,13 +1,22 @@
 HOTEL BOOKING DEMAND - DATA AUDIT
-Source discovery audit - B0-11 / US-5
+Source discovery audit - B0-11 / US-5 (Catalog v1.1.0)
 
 ======================================================================
-1. DATASET OVERVIEW
+1. DATASET OVERVIEW & CATALOG MAPPING
 ======================================================================
 Dataset: hotel_bookings.csv
 Rows: 119,390
 Columns: 32
-Memory usage: 93.90 MB
+Memory usage: 104.83 MB
+
+Catalog Hotel Mapping (PT, EUR):
+- City Hotel -> HP-PT-001 (HospedaPlus Lisboa City, 207 rooms, EUR): 79,330 rows
+- Resort Hotel -> HP-PT-002 (HospedaPlus Algarve Resort, 171 rooms, EUR): 40,060 rows
+
+PT Season Distribution (RN-05):
+- HIGH (multiplier 1.25x): 41,027 rows (34.36%)
+- MID (multiplier 1.0x): 44,885 rows (37.60%)
+- LOW (multiplier 0.85x): 33,478 rows (28.04%)
 
 ======================================================================
 2. SCHEMA

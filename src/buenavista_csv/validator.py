@@ -1,10 +1,13 @@
 """
 US-6 — Non-Destructive File Quality Controls and Batch Validation Readiness (F1 & F4).
 
-Validates F1 (Hotel Booking Demand) and F4 (Traditional Agency CSVs) against canonical
-schemas, reporting schema mismatches, missing required values, invalid data types,
-duplicate records, and business-rule anomalies (Section 5.3 / RN-08) without silently
-modifying or overwriting the original source files.
+Aligned with shared catalog.json (v1.1.0):
+  - Validates hotel_id against the 28 canonical hotel codes (HP-PT-001 .. HP-ES-003)
+  - Validates room_type against catalog room_types (SINGLE, DOUBLE, TWIN, SUITE)
+  - Validates currency against catalog currencies (COP, MXN, BRL, EUR, USD)
+  - Validates agency booking prefix against catalog F4 channels (AG01 .. AG15)
+  - Reports schema mismatches, missing required values, duplicates, invalid types,
+    and business anomalies without modifying raw CSV files.
 """
 
 from __future__ import annotations
@@ -18,6 +21,13 @@ from pathlib import Path
 from typing import Any
 import pandas as pd
 
+from buenavista_csv.catalog import (
+    ALLOWED_CURRENCIES,
+    ALLOWED_ROOM_TYPES,
+    CATALOG_VERSION,
+    F4_AGENCIES,
+    HOTELS_BY_CODE,
+)
 from buenavista_csv.f4_generator import (
     LAYOUT_A_COLUMNS,
     LAYOUT_B_COLUMNS,
@@ -42,9 +52,7 @@ EXPECTED_F1_COLUMNS = [
     "total_of_special_requests", "reservation_status", "reservation_status_date",
 ]
 
-ALLOWED_ROOM_TYPES = {"SINGLE", "DOUBLE", "TWIN", "SUITE"}
-ALLOWED_CURRENCIES = {"EUR", "USD"}
-HOTEL_ID_PATTERN = re.compile(r"^hotel-\d{3}$")
+ALLOWED_ROOM_TYPES_SET = set(ALLOWED_ROOM_TYPES)
 
 
 def validate_f1_file(csv_path: Path) -> dict[str, Any]:
@@ -52,6 +60,7 @@ def validate_f1_file(csv_path: Path) -> dict[str, Any]:
     if not csv_path.exists():
         return {
             "source": "F1",
+            "catalog_version": CATALOG_VERSION,
             "file": str(csv_path),
             "valid_schema": False,
             "status": "FAILED",
@@ -74,6 +83,7 @@ def validate_f1_file(csv_path: Path) -> dict[str, Any]:
         })
         return {
             "source": "F1",
+            "catalog_version": CATALOG_VERSION,
             "file": csv_path.name,
             "rows": len(df_raw),
             "valid_schema": False,
@@ -81,7 +91,6 @@ def validate_f1_file(csv_path: Path) -> dict[str, Any]:
             "defects": defects,
         }
 
-    # Check numeric types and anomalies
     adr_series = pd.to_numeric(df_raw["adr"], errors="coerce")
     invalid_adr_rows = df_raw[adr_series.isna()].index.tolist()
     for idx in invalid_adr_rows[:20]:
@@ -110,7 +119,6 @@ def validate_f1_file(csv_path: Path) -> dict[str, Any]:
             "detail": f"Negative ADR value: {adr_series.loc[idx]}",
         })
 
-    extreme_high_indices = df_raw[adr_series > upper_bound].index.tolist()
     zero_adr_count = int((adr_series == 0).sum())
 
     adults_num = pd.to_numeric(df_raw["adults"], errors="coerce").fillna(-1)
@@ -139,6 +147,7 @@ def validate_f1_file(csv_path: Path) -> dict[str, Any]:
 
     return {
         "source": "F1",
+        "catalog_version": CATALOG_VERSION,
         "file": csv_path.name,
         "rows": len(df_raw),
         "valid_schema": True,
@@ -170,7 +179,6 @@ def _is_fuzzy_name_match(name_a: str, name_b: str) -> bool:
     tokens_b = _normalize_name_tokens(name_b)
     if tokens_a == tokens_b and len(tokens_a) > 0:
         return True
-    # Check shared first name + initial or Levenshtein-1 typo in surname
     parts_a = name_a.lower().replace(".", "").split()
     parts_b = name_b.lower().replace(".", "").split()
     if len(parts_a) >= 2 and len(parts_b) >= 2 and parts_a[0] == parts_b[0]:
@@ -183,7 +191,7 @@ def _is_fuzzy_name_match(name_a: str, name_b: str) -> bool:
 
 
 def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> dict[str, Any]:
-    """Validate a single F4 weekly agency CSV file non-destructively."""
+    """Validate a single F4 weekly agency CSV file against catalog v1.1.0 non-destructively."""
     defects: list[dict[str, Any]] = []
     if not csv_path.exists():
         return {
@@ -257,13 +265,13 @@ def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> 
         if not guest_name.strip():
             defects.append({"type": "MISSING_REQUIRED_VALUE", "file": csv_path.name, "field": "guest_name", "record": rec_id, "detail": "Missing guest name"})
 
-        if not HOTEL_ID_PATTERN.match(hotel_id.strip()):
-            defects.append({"type": "INVALID_HOTEL_ID", "file": csv_path.name, "field": "hotel_id", "record": rec_id, "detail": f"Invalid hotel_id '{hotel_id}'"})
+        if hotel_id.strip() not in HOTELS_BY_CODE:
+            defects.append({"type": "INVALID_HOTEL_ID", "file": csv_path.name, "field": "hotel_id", "record": rec_id, "detail": f"Hotel code '{hotel_id}' not in catalog.json (expected HP-XX-NNN)"})
 
-        if room_type.strip() not in ALLOWED_ROOM_TYPES:
+        if room_type.strip() not in ALLOWED_ROOM_TYPES_SET:
             defects.append({"type": "INVALID_ROOM_TYPE", "file": csv_path.name, "field": "room_type", "record": rec_id, "detail": f"Invalid room_type '{room_type}'"})
 
-        # Defect 3: Missing currency
+        # Defect 3: Missing currency or currency not in catalog.json
         if not currency.strip():
             defects.append({
                 "type": "MISSING_CURRENCY",
@@ -278,10 +286,9 @@ def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> 
                 "file": csv_path.name,
                 "field": "currency",
                 "record": rec_id,
-                "detail": f"Unsupported currency '{currency}'",
+                "detail": f"Unsupported currency '{currency}' (allowed: {sorted(ALLOWED_CURRENCIES)})",
             })
 
-        # Dates check (Defect 2)
         try:
             ci_dt = datetime.strptime(check_in.strip(), "%Y-%m-%d")
             co_dt = datetime.strptime(check_out.strip(), "%Y-%m-%d")
@@ -303,7 +310,6 @@ def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> 
                 "detail": f"Unparseable dates: check_in='{check_in}', check_out='{check_out}'",
             })
 
-        # Numeric amount & commission check
         try:
             amt = float(amount_str)
             if amt <= 0:
@@ -342,7 +348,6 @@ def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> 
                 "detail": f"Non-numeric commission '{comm_str}'",
             })
 
-        # Defect 4: Cross-channel duplicate check against F2 (RN-08: same guest + hotel + check_in within +/-1 day)
         if f2_reference and ci_dt is not None:
             for ev in f2_reference:
                 if ev.get("hotel_id") != hotel_id.strip():
@@ -386,6 +391,7 @@ def validate_f4_directory(agency_dir: Path, f2_events_path: Path = DEFAULT_F2_PA
     all_defects = []
     total_rows = 0
     layout_counts = {"A": 0, "B": 0, "INVALID": 0}
+    expected_count = len(F4_AGENCIES)
 
     for fpath in csv_files:
         rep = validate_f4_file(fpath, f2_reference=f2_ref)
@@ -404,15 +410,20 @@ def validate_f4_directory(agency_dir: Path, f2_events_path: Path = DEFAULT_F2_PA
 
     structural_errors = sum(
         defect_counts_by_type.get(k, 0)
-        for k in ("SCHEMA_MISMATCH", "COLUMN_COUNT_MISMATCH", "INVALID_TYPE", "MISSING_REQUIRED_VALUE", "INVALID_DATE_RANGE")
+        for k in (
+            "SCHEMA_MISMATCH", "COLUMN_COUNT_MISMATCH", "INVALID_TYPE",
+            "MISSING_REQUIRED_VALUE", "INVALID_DATE_RANGE", "INVALID_HOTEL_ID",
+            "INVALID_ROOM_TYPE", "INVALID_CURRENCY", "INVALID_COMMISSION_RATE",
+        )
     )
-    status = "PASSED_WITH_CATALOGUED_DEFECTS" if structural_errors == 0 and len(csv_files) == 15 else "FAILED_VALIDATION"
+    status = "PASSED_WITH_CATALOGUED_DEFECTS" if structural_errors == 0 and len(csv_files) == expected_count else "FAILED_VALIDATION"
 
     return {
         "source": "F4",
+        "catalog_version": CATALOG_VERSION,
         "directory": str(agency_dir),
         "agency_files_found": len(csv_files),
-        "expected_agency_files": 15,
+        "expected_agency_files": expected_count,
         "total_rows": total_rows,
         "layout_distribution": layout_counts,
         "status": status,
@@ -434,11 +445,12 @@ def main() -> None:
     f1_res = validate_f1_file(args.f1_path)
     f4_res = validate_f4_directory(args.f4_dir, args.f2_events)
 
-    combined = {"f1_validation": f1_res, "f4_validation": f4_res}
+    combined = {"catalog_version": CATALOG_VERSION, "f1_validation": f1_res, "f4_validation": f4_res}
     out_file = args.report_dir / "quality_validation_report.json"
     out_file.write_text(json.dumps(combined, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print("=" * 70)
+    print(f"Catalog Version:      v{CATALOG_VERSION}")
     print(f"F1 Validation Status: {f1_res['status']} ({f1_res.get('rows', 0):,} rows)")
     print(f"F4 Validation Status: {f4_res['status']} ({f4_res['agency_files_found']} files, {f4_res['total_rows']} rows)")
     print(f"F4 Defects by Type:   {f4_res['defect_counts_by_type']}")

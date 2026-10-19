@@ -1,76 +1,92 @@
 {
+  "catalog_version": "1.1.0",
   "agencies": {
     "ViajaFacil": {
+      "channel_code": "AG01",
       "file": "viajafacil_week.csv",
       "rows": 13,
       "layout": "B"
     },
     "SolyMar Tours": {
+      "channel_code": "AG02",
       "file": "solymar_tours_week.csv",
       "rows": 13,
       "layout": "A"
     },
     "EuroTrip Agency": {
+      "channel_code": "AG03",
       "file": "eurotrip_agency_week.csv",
       "rows": 13,
       "layout": "B"
     },
     "Andes Travel": {
+      "channel_code": "AG04",
       "file": "andes_travel_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "GlobalStay Agency": {
+      "channel_code": "AG05",
       "file": "globalstay_agency_week.csv",
       "rows": 12,
       "layout": "B"
     },
     "CaribeViajes": {
+      "channel_code": "AG06",
       "file": "caribeviajes_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "MontanaTours": {
+      "channel_code": "AG07",
       "file": "montanatours_week.csv",
       "rows": 12,
       "layout": "B"
     },
     "CostaBella Travel": {
+      "channel_code": "AG08",
       "file": "costabella_travel_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "NorteSur Agencia": {
+      "channel_code": "AG09",
       "file": "nortesur_agencia_week.csv",
       "rows": 12,
       "layout": "B"
     },
     "Horizonte Viajes": {
+      "channel_code": "AG10",
       "file": "horizonte_viajes_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "Rutas del Sur": {
+      "channel_code": "AG11",
       "file": "rutas_del_sur_week.csv",
       "rows": 12,
       "layout": "B"
     },
     "BlueSky Agency": {
+      "channel_code": "AG12",
       "file": "bluesky_agency_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "Destino Feliz": {
+      "channel_code": "AG13",
       "file": "destino_feliz_week.csv",
       "rows": 12,
       "layout": "B"
     },
     "Puerta del Sol Travel": {
+      "channel_code": "AG14",
       "file": "puerta_del_sol_travel_week.csv",
       "rows": 12,
       "layout": "A"
     },
     "Viajes Amanecer": {
+      "channel_code": "AG15",
       "file": "viajes_amanecer_week.csv",
       "rows": 12,
       "layout": "B"
@@ -78,37 +94,40 @@
   },
   "duplicates_created": [
     {
+      "agency_code": "AG01",
       "agency": "ViajaFacil",
       "agency_booking_id": "AG01-00013",
       "original_reservation_id": "res-10024",
       "original_channel": "booking_channel_a",
       "real_guest_name": "Diego Ferreira",
       "agency_guest_name": "Diego ferreira",
-      "hotel_id": "hotel-022",
+      "hotel_id": "HP-BR-003",
       "agency_check_in": "2026-11-11",
       "original_check_in": "2026-11-11",
       "check_out": "2026-11-12"
     },
     {
+      "agency_code": "AG02",
       "agency": "SolyMar Tours",
       "agency_booking_id": "AG02-00026",
       "original_reservation_id": "res-10012",
       "original_channel": "expedia",
       "real_guest_name": "Patricia Rossi",
       "agency_guest_name": "Patricia Rossi",
-      "hotel_id": "hotel-001",
+      "hotel_id": "HP-PT-001",
       "agency_check_in": "2026-11-07",
       "original_check_in": "2026-11-08",
       "check_out": "2026-11-09"
     },
     {
+      "agency_code": "AG03",
       "agency": "EuroTrip Agency",
       "agency_booking_id": "AG03-00039",
       "original_reservation_id": "res-10029",
       "original_channel": "direct_ota",
       "real_guest_name": "Elena Santos",
       "agency_guest_name": "Elena santos",
-      "hotel_id": "hotel-006",
+      "hotel_id": "HP-CO-003",
       "agency_check_in": "2027-01-25",
       "original_check_in": "2027-01-26",
       "check_out": "2027-01-30"

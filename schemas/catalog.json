@@ -1,0 +1,642 @@
+{
+  "catalog_version": "1.1.0",
+  "description": "Shared reference data of HospedaPlus Hotels. Every source (F2-F5) and the data platform use these codes. Owner: db_simulated (F3).",
+  "countries": [
+    {
+      "code": "CO",
+      "name": "Colombia",
+      "currency": "COP",
+      "language": "es"
+    },
+    {
+      "code": "MX",
+      "name": "Mexico",
+      "currency": "MXN",
+      "language": "es"
+    },
+    {
+      "code": "BR",
+      "name": "Brazil",
+      "currency": "BRL",
+      "language": "pt"
+    },
+    {
+      "code": "PT",
+      "name": "Portugal",
+      "currency": "EUR",
+      "language": "pt"
+    },
+    {
+      "code": "ES",
+      "name": "Spain",
+      "currency": "EUR",
+      "language": "es"
+    }
+  ],
+  "currencies": [
+    {
+      "code": "COP",
+      "role": "hotel currency (CO)"
+    },
+    {
+      "code": "MXN",
+      "role": "hotel currency (MX)"
+    },
+    {
+      "code": "BRL",
+      "role": "hotel currency (BR)"
+    },
+    {
+      "code": "EUR",
+      "role": "hotel currency (PT, ES)"
+    },
+    {
+      "code": "USD",
+      "role": "accepted from agencies (F4); not a hotel currency"
+    }
+  ],
+  "reporting_currency": "COP",
+  "room_types": [
+    {
+      "code": "SINGLE",
+      "name": "Single room",
+      "max_guests": 1
+    },
+    {
+      "code": "DOUBLE",
+      "name": "Double room",
+      "max_guests": 2
+    },
+    {
+      "code": "TWIN",
+      "name": "Twin room",
+      "max_guests": 2
+    },
+    {
+      "code": "SUITE",
+      "name": "Suite",
+      "max_guests": 4
+    }
+  ],
+  "channels": [
+    {
+      "code": "direct_web",
+      "name": "HospedaPlus website",
+      "type": "direct",
+      "commission_pct": 0,
+      "source": "F3"
+    },
+    {
+      "code": "corporate",
+      "name": "Corporate agreements",
+      "type": "corporate",
+      "commission_pct": 0,
+      "source": "F3"
+    },
+    {
+      "code": "booking_channel_a",
+      "name": "OTA channel A",
+      "type": "ota",
+      "commission_pct": 18,
+      "source": "F2"
+    },
+    {
+      "code": "booking_channel_b",
+      "name": "OTA channel B",
+      "type": "ota",
+      "commission_pct": 18,
+      "source": "F2"
+    },
+    {
+      "code": "expedia",
+      "name": "Expedia",
+      "type": "ota",
+      "commission_pct": 18,
+      "source": "F2"
+    },
+    {
+      "code": "direct_ota",
+      "name": "OTA direct connect",
+      "type": "ota",
+      "commission_pct": 18,
+      "source": "F2"
+    },
+    {
+      "code": "AG01",
+      "name": "ViajaFacil",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG02",
+      "name": "SolyMar Tours",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG03",
+      "name": "EuroTrip Agency",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG04",
+      "name": "Andes Travel",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG05",
+      "name": "GlobalStay Agency",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG06",
+      "name": "CaribeViajes",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG07",
+      "name": "MontanaTours",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG08",
+      "name": "CostaBella Travel",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG09",
+      "name": "NorteSur Agencia",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG10",
+      "name": "Horizonte Viajes",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG11",
+      "name": "Rutas del Sur",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG12",
+      "name": "BlueSky Agency",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG13",
+      "name": "Destino Feliz",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG14",
+      "name": "Puerta del Sol Travel",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    },
+    {
+      "code": "AG15",
+      "name": "Viajes Amanecer",
+      "type": "agency",
+      "commission_pct": 10,
+      "source": "F4"
+    }
+  ],
+  "seasons": {
+    "_comment": "RN-05 seasons per country as MM-DD ranges (inclusive, may wrap the year end). Any day not listed is MID.",
+    "CO": {
+      "HIGH": [
+        [
+          "12-15",
+          "01-15"
+        ],
+        [
+          "06-15",
+          "07-31"
+        ]
+      ],
+      "LOW": [
+        [
+          "02-01",
+          "03-15"
+        ],
+        [
+          "09-01",
+          "11-30"
+        ]
+      ]
+    },
+    "MX": {
+      "HIGH": [
+        [
+          "12-15",
+          "01-10"
+        ],
+        [
+          "03-20",
+          "04-15"
+        ],
+        [
+          "07-01",
+          "08-20"
+        ]
+      ],
+      "LOW": [
+        [
+          "09-01",
+          "11-30"
+        ]
+      ]
+    },
+    "BR": {
+      "HIGH": [
+        [
+          "12-15",
+          "03-05"
+        ],
+        [
+          "07-01",
+          "07-31"
+        ]
+      ],
+      "LOW": [
+        [
+          "04-01",
+          "06-30"
+        ],
+        [
+          "08-15",
+          "11-30"
+        ]
+      ]
+    },
+    "PT": {
+      "HIGH": [
+        [
+          "06-15",
+          "09-15"
+        ],
+        [
+          "12-20",
+          "01-05"
+        ]
+      ],
+      "LOW": [
+        [
+          "11-01",
+          "12-19"
+        ],
+        [
+          "01-06",
+          "03-31"
+        ]
+      ]
+    },
+    "ES": {
+      "HIGH": [
+        [
+          "06-15",
+          "09-15"
+        ],
+        [
+          "12-20",
+          "01-05"
+        ]
+      ],
+      "LOW": [
+        [
+          "11-01",
+          "12-19"
+        ],
+        [
+          "01-06",
+          "03-31"
+        ]
+      ]
+    }
+  },
+  "pricing_rules": {
+    "_comment": "Business rules from the statement. Every price calculation (F3 seed, hourly pricing job, Silver/Gold) reads them from here.",
+    "season_multipliers": {
+      "LOW": 0.85,
+      "MID": 1.0,
+      "HIGH": 1.25
+    },
+    "event_multiplier": 1.15,
+    "pickup": {
+      "window_days": 14,
+      "threshold_pct": 15,
+      "above_multiplier": 1.1,
+      "below_multiplier": 0.92
+    }
+  },
+  "hotels": [
+    {
+      "code": "HP-PT-001",
+      "name": "HospedaPlus Lisboa City",
+      "category": "urban",
+      "city": "Lisbon",
+      "country": "PT",
+      "timezone": "Europe/Lisbon",
+      "currency": "EUR",
+      "rooms": 207,
+      "f1_profile": "City Hotel"
+    },
+    {
+      "code": "HP-PT-002",
+      "name": "HospedaPlus Algarve Resort",
+      "category": "resort",
+      "city": "Faro",
+      "country": "PT",
+      "timezone": "Europe/Lisbon",
+      "currency": "EUR",
+      "rooms": 171,
+      "f1_profile": "Resort Hotel"
+    },
+    {
+      "code": "HP-PT-003",
+      "name": "HospedaPlus Porto Ribeira",
+      "category": "urban",
+      "city": "Porto",
+      "country": "PT",
+      "timezone": "Europe/Lisbon",
+      "currency": "EUR",
+      "rooms": 108
+    },
+    {
+      "code": "HP-CO-001",
+      "name": "HospedaPlus Barranquilla Prado",
+      "category": "urban",
+      "city": "Barranquilla",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 130
+    },
+    {
+      "code": "HP-CO-002",
+      "name": "HospedaPlus Cartagena Bocagrande",
+      "category": "resort",
+      "city": "Cartagena",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 192
+    },
+    {
+      "code": "HP-CO-003",
+      "name": "HospedaPlus Cartagena Centro Historico",
+      "category": "urban",
+      "city": "Cartagena",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 88
+    },
+    {
+      "code": "HP-CO-004",
+      "name": "HospedaPlus Santa Marta Rodadero",
+      "category": "resort",
+      "city": "Santa Marta",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 154
+    },
+    {
+      "code": "HP-CO-005",
+      "name": "HospedaPlus Bogota Chico",
+      "category": "urban",
+      "city": "Bogota",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 160
+    },
+    {
+      "code": "HP-CO-006",
+      "name": "HospedaPlus Bogota Aeropuerto",
+      "category": "urban",
+      "city": "Bogota",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 141
+    },
+    {
+      "code": "HP-CO-007",
+      "name": "HospedaPlus Medellin Poblado",
+      "category": "urban",
+      "city": "Medellin",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 120
+    },
+    {
+      "code": "HP-CO-008",
+      "name": "HospedaPlus Cali Granada",
+      "category": "urban",
+      "city": "Cali",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 93
+    },
+    {
+      "code": "HP-CO-009",
+      "name": "HospedaPlus San Andres Spratt",
+      "category": "resort",
+      "city": "San Andres",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 172
+    },
+    {
+      "code": "HP-CO-010",
+      "name": "HospedaPlus Pereira Eje Cafetero",
+      "category": "resort",
+      "city": "Pereira",
+      "country": "CO",
+      "timezone": "America/Bogota",
+      "currency": "COP",
+      "rooms": 77
+    },
+    {
+      "code": "HP-MX-001",
+      "name": "HospedaPlus Cancun Zona Hotelera",
+      "category": "resort",
+      "city": "Cancun",
+      "country": "MX",
+      "timezone": "America/Cancun",
+      "currency": "MXN",
+      "rooms": 219
+    },
+    {
+      "code": "HP-MX-002",
+      "name": "HospedaPlus Playa del Carmen",
+      "category": "resort",
+      "city": "Playa del Carmen",
+      "country": "MX",
+      "timezone": "America/Cancun",
+      "currency": "MXN",
+      "rooms": 146
+    },
+    {
+      "code": "HP-MX-003",
+      "name": "HospedaPlus CDMX Reforma",
+      "category": "urban",
+      "city": "Mexico City",
+      "country": "MX",
+      "timezone": "America/Mexico_City",
+      "currency": "MXN",
+      "rooms": 181
+    },
+    {
+      "code": "HP-MX-004",
+      "name": "HospedaPlus Guadalajara Centro",
+      "category": "urban",
+      "city": "Guadalajara",
+      "country": "MX",
+      "timezone": "America/Mexico_City",
+      "currency": "MXN",
+      "rooms": 102
+    },
+    {
+      "code": "HP-MX-005",
+      "name": "HospedaPlus Monterrey Valle",
+      "category": "urban",
+      "city": "Monterrey",
+      "country": "MX",
+      "timezone": "America/Monterrey",
+      "currency": "MXN",
+      "rooms": 113
+    },
+    {
+      "code": "HP-MX-006",
+      "name": "HospedaPlus Los Cabos Marina",
+      "category": "resort",
+      "city": "Cabo San Lucas",
+      "country": "MX",
+      "timezone": "America/Mazatlan",
+      "currency": "MXN",
+      "rooms": 137
+    },
+    {
+      "code": "HP-BR-001",
+      "name": "HospedaPlus Rio Copacabana",
+      "category": "resort",
+      "city": "Rio de Janeiro",
+      "country": "BR",
+      "timezone": "America/Sao_Paulo",
+      "currency": "BRL",
+      "rooms": 187
+    },
+    {
+      "code": "HP-BR-002",
+      "name": "HospedaPlus Sao Paulo Paulista",
+      "category": "urban",
+      "city": "Sao Paulo",
+      "country": "BR",
+      "timezone": "America/Sao_Paulo",
+      "currency": "BRL",
+      "rooms": 201
+    },
+    {
+      "code": "HP-BR-003",
+      "name": "HospedaPlus Salvador Barra",
+      "category": "resort",
+      "city": "Salvador",
+      "country": "BR",
+      "timezone": "America/Bahia",
+      "currency": "BRL",
+      "rooms": 117
+    },
+    {
+      "code": "HP-BR-004",
+      "name": "HospedaPlus Florianopolis Jurere",
+      "category": "resort",
+      "city": "Florianopolis",
+      "country": "BR",
+      "timezone": "America/Sao_Paulo",
+      "currency": "BRL",
+      "rooms": 101
+    },
+    {
+      "code": "HP-BR-005",
+      "name": "HospedaPlus Recife Boa Viagem",
+      "category": "resort",
+      "city": "Recife",
+      "country": "BR",
+      "timezone": "America/Recife",
+      "currency": "BRL",
+      "rooms": 124
+    },
+    {
+      "code": "HP-BR-006",
+      "name": "HospedaPlus Manaus Centro",
+      "category": "urban",
+      "city": "Manaus",
+      "country": "BR",
+      "timezone": "America/Manaus",
+      "currency": "BRL",
+      "rooms": 82
+    },
+    {
+      "code": "HP-ES-001",
+      "name": "HospedaPlus Madrid Gran Via",
+      "category": "urban",
+      "city": "Madrid",
+      "country": "ES",
+      "timezone": "Europe/Madrid",
+      "currency": "EUR",
+      "rooms": 165
+    },
+    {
+      "code": "HP-ES-002",
+      "name": "HospedaPlus Barcelona Eixample",
+      "category": "urban",
+      "city": "Barcelona",
+      "country": "ES",
+      "timezone": "Europe/Madrid",
+      "currency": "EUR",
+      "rooms": 133
+    },
+    {
+      "code": "HP-ES-003",
+      "name": "HospedaPlus Tenerife Costa Adeje",
+      "category": "resort",
+      "city": "Tenerife",
+      "country": "ES",
+      "timezone": "Atlantic/Canary",
+      "currency": "EUR",
+      "rooms": 179
+    }
+  ]
+}

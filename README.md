@@ -1,13 +1,13 @@
 # buenavista-csv
 
-Standalone repository for the file-based data sources (**F1** and **F4**) of the **HospedaPlus Revenue** platform (`US-5` & `US-6`). This repository is decoupled from the streaming (`buenavista-streaming`), database (`buenavista-simulated-db`), and API (`buenavista-api`) repositories.
+Standalone repository for the file-based data sources (**F1** and **F4**) of the **HospedaPlus Revenue** platform (`US-5` & `US-6`), standardized against the shared platform reference catalog (`schemas/catalog.json`, **v1.1.0**). Decoupled from `buenavista-streaming` (F2), `buenavista-simulated-db` (F3), and `buenavista-api` (F5/F6/F7).
 
-## 1. Data Sources Scope
+## 1. Data Sources Scope & Catalog v1.1.0 Alignment
 
-| ID | Source | Type | Frequency | Scope & Volume | Provenance / License |
+| ID | Source | Type | Frequency | Catalog v1.1.0 Mapping & Scope | Provenance / License |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **F1** | Hotel Booking Demand | Historical CSV | One-time / Backfill | 119,390 rows × 32 cols (`City Hotel` & `Resort Hotel`) | [Kaggle Dataset](https://www.google.com/search?q=https%3A%2F%2Fwww.kaggle.com%2Fdatasets%2Fjessemostipak%2Fhotel-booking-demand) (`CC BY 4.0`) |
-| **F4** | Traditional Agency Files | Simulated CSV | Weekly Batch | 15 agencies (~183 rows/week across Layouts A & B) | Synthetic generator (`seed=7`) |
+| **F1** | Hotel Booking Demand | Historical CSV | One-time / Backfill | 119,390 rows × 32 cols mapped to `HP-PT-001` (*City Hotel*, 207 rooms, `EUR`) & `HP-PT-002` (*Resort Hotel*, 171 rooms, `EUR`) | [Kaggle Dataset](https://www.kaggle.com/datasets/jessemostipak/hotel-booking-demand) (`CC BY 4.0`) |
+| **F4** | Traditional Agency Files | Simulated CSV | Weekly Batch | 15 agencies (`AG01`..`AG15`, `10%` commission), 28 hotels (`HP-PT-001`..`HP-ES-003`), room types (`SINGLE`, `DOUBLE`, `TWIN`, `SUITE`), currencies (`COP`, `MXN`, `BRL`, `EUR`, `USD`) | Synthetic generator (`seed=7`) |
 
 ## 2. Repository Structure
 
@@ -16,16 +16,18 @@ buenavista-csv/
 ├── pyproject.toml                  # Package configuration & dependencies
 ├── .env.example                    # Environment variables template
 ├── schemas/
+│   ├── catalog.json                # Shared platform reference catalog (v1.1.0)
 │   ├── f1_schema.json              # Canonical 32-column contract & IQR bounds for F1
 │   └── f4_layouts_schema.json      # Dual-layout contract (Layout A & Layout B) for F4
 ├── data/
 │   ├── f1_historical/
 │   │   └── hotel_bookings.csv      # F1 raw Kaggle dataset
 │   └── f2_reference/
-│       └── events.jsonl            # Reference F2 events for cross-channel duplicate generation
+│       └── events.jsonl            # Reference F2 events aligned with HP-XX-NNN hotels
 ├── src/buenavista_csv/
+│   ├── catalog.py                  # Shared catalog.json loader & season/currency helpers
 │   ├── defects.py                  # Unified DefectRates configuration (US-14 / US-26)
-│   ├── f1_audit.py                 # F1 schema profiler & IQR outlier auditor (US-11)
+│   ├── f1_audit.py                 # F1 schema profiler, PT season mapper & IQR auditor (US-11)
 │   ├── f4_generator.py             # F4 weekly CSV generator (US-25 / US-26)
 │   └── validator.py                # Non-destructive batch quality validator (US-6)
 ├── output/                         # Generated audit, agency CSVs, and validation reports
@@ -39,7 +41,6 @@ buenavista-csv/
 * **Package Manager:** `uv` (recommended) or `pip`
 
 ```bash
-# Clone repository and install dependencies
 git clone <repo-url>
 cd buenavista-csv
 uv sync --extra test
@@ -50,20 +51,16 @@ uv sync --extra test
 Run all commands from the root of `buenavista-csv`:
 
 ```bash
-# 1. Profile F1 schema, null tokens, and ADR outliers via IQR (US-11 / US-5)
+# 1. Profile F1 schema, PT season distribution, null tokens, and ADR outliers via IQR (US-11 / US-5)
 uv run -m buenavista_csv.f1_audit
 
-# 2. Generate 15 weekly F4 agency CSVs with configurable defects (US-25 / US-26)
-uv run -m buenavista_csv.f4_generator \
-  --seed 7 \
-  --bookings-per-agency 12 \
-  --duplicate-count 3 \
-  --missing-currency-rate 0.10
+# 2. Generate 15 weekly F4 agency CSVs using catalog v1.1.0 codes (US-25 / US-26)
+uv run -m buenavista_csv.f4_generator   --seed 7   --bookings-per-agency 12   --duplicate-count 3   --missing-currency-rate 0.10
 
-# 3. Run non-destructive quality checks on F1 and F4 (US-6)
+# 3. Run non-destructive quality checks on F1 and F4 against catalog v1.1.0 (US-6)
 uv run -m buenavista_csv.validator
 
-# 4. Run automated unit tests (including malformed fixture checks)
+# 4. Run automated unit tests (6/6 tests including catalog v1.1.0 & malformed fixtures)
 uv run python -m unittest discover -s tests -v
 ```
 
@@ -75,4 +72,4 @@ uv run python -m unittest discover -s tests -v
 
 ## 6. Documentation
 
-Detailed architectural role, Medallion (`Bronze` → `Silver` → `Gold`) consumption contracts, IQR outlier mathematics, and business rules (`RN-01`, `RN-02`, `RN-03`, `RN-05`, `RN-08`, `RN-11`) are documented in `docs/data-sources/index.md` for the shared Docusaurus site.
+Detailed architectural role, Medallion (`Bronze` → `Silver` → `Gold`) consumption contracts, shared catalog (`v1.1.0`) mappings, IQR outlier mathematics, and business rules (`RN-01`, `RN-02`, `RN-03`, `RN-05`, `RN-06`, `RN-08`, `RN-11`) are documented in `docs/data-sources/index.md` for the shared Docusaurus site.

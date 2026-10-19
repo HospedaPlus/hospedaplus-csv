@@ -1,9 +1,11 @@
 """
 US-11 / US-5 — F1 (Hotel Booking Demand, Kaggle) Data Profiler & Non-Destructive Auditor.
 
-Profiles schema, data types, null/missing tokens (including literal "NULL" and "NA" strings),
-zero-guest rows, and ADR statistical outliers using Tukey's 1.5x IQR fence without modifying
-the source CSV file.
+Aligned with shared catalog.json (v1.1.0):
+  - Maps F1 'City Hotel' -> HP-PT-001 (HospedaPlus Lisboa City, PT, EUR, 207 rooms)
+  - Maps F1 'Resort Hotel' -> HP-PT-002 (HospedaPlus Algarve Resort, PT, EUR, 171 rooms)
+  - Profiles historical bookings against PT season ranges (LOW: 0.85, MID: 1.0, HIGH: 1.25)
+  - Audits 32 columns, literal "NULL"/"NA" tokens, zero-guest rows, and IQR ADR outliers.
 """
 
 from __future__ import annotations
@@ -12,9 +14,21 @@ import argparse
 from pathlib import Path
 import pandas as pd
 
+from buenavista_csv.catalog import (
+    CATALOG_VERSION,
+    F1_PROFILE_TO_HOTEL,
+    SEASON_MULTIPLIERS,
+    get_season_for_date,
+)
 
 DEFAULT_CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "f1_historical" / "hotel_bookings.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output" / "f1_audit"
+
+MONTH_MAP = {
+    "January": "01", "February": "02", "March": "03", "April": "04",
+    "May": "05", "June": "06", "July": "07", "August": "08",
+    "September": "09", "October": "10", "November": "11", "December": "12",
+}
 
 
 def format_number(value: int) -> str:
@@ -90,17 +104,35 @@ def run_f1_audit(csv_path: Path = DEFAULT_CSV_PATH, output_dir: Path = DEFAULT_O
     outlier_count = int(adr_outlier_mask.sum())
     outlier_percent = (outlier_count / rows) * 100
 
-    # Zero-guest anomaly detection (adults + children + babies == 0)
     children_filled = pd.to_numeric(df["children"], errors="coerce").fillna(0)
     zero_guests_count = int(((df["adults"] == 0) & (children_filled == 0) & (df["babies"] == 0)).sum())
 
-    # Literal string token counts in raw file
     literal_nulls = {
         col: int((df_raw[col] == "NULL").sum())
         for col in ["company", "agent", "country"]
         if col in df_raw.columns
     }
     literal_na_children = int((df_raw["children"] == "NA").sum()) if "children" in df_raw.columns else 0
+
+    # Catalog v1.1.0 Hotel Mapping & PT Season Distribution
+    hotel_counts = df["hotel"].value_counts().to_dict()
+    mapped_hotels = {}
+    for f1_name, count in hotel_counts.items():
+        cat_hotel = F1_PROFILE_TO_HOTEL.get(f1_name, {})
+        mapped_hotels[f1_name] = {
+            "catalog_code": cat_hotel.get("code"),
+            "catalog_name": cat_hotel.get("name"),
+            "country": cat_hotel.get("country", "PT"),
+            "currency": cat_hotel.get("currency", "EUR"),
+            "rooms": cat_hotel.get("rooms"),
+            "rows": int(count),
+        }
+
+    mm_series = df["arrival_date_month"].map(MONTH_MAP)
+    dd_series = df["arrival_date_day_of_month"].astype(int).map(lambda d: f"{d:02d}")
+    mmdd_series = mm_series + "-" + dd_series
+    seasons_assigned = mmdd_series.map(lambda mmdd: get_season_for_date("PT", mmdd)[0])
+    season_counts = {k: int(v) for k, v in seasons_assigned.value_counts().to_dict().items()}
 
     audit_records.append({
         "category": "adr",
@@ -129,13 +161,24 @@ def run_f1_audit(csv_path: Path = DEFAULT_CSV_PATH, output_dir: Path = DEFAULT_O
 
     with open(summary_path, "w", encoding="utf-8") as file:
         file.write("HOTEL BOOKING DEMAND - DATA AUDIT\n")
-        file.write("Source discovery audit - B0-11 / US-5\n")
+        file.write(f"Source discovery audit - B0-11 / US-5 (Catalog v{CATALOG_VERSION})\n")
 
-        write_section(file, "1. DATASET OVERVIEW")
+        write_section(file, "1. DATASET OVERVIEW & CATALOG MAPPING")
         file.write(f"Dataset: {csv_path.name}\n")
         file.write(f"Rows: {format_number(rows)}\n")
         file.write(f"Columns: {format_number(columns)}\n")
-        file.write(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB\n")
+        file.write(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB\n\n")
+        file.write("Catalog Hotel Mapping (PT, EUR):\n")
+        for f1_name, info in mapped_hotels.items():
+            file.write(
+                f"- {f1_name} -> {info['catalog_code']} ({info['catalog_name']}, "
+                f"{info['rooms']} rooms, {info['currency']}): {format_number(info['rows'])} rows\n"
+            )
+        file.write("\nPT Season Distribution (RN-05):\n")
+        for s_code in ("HIGH", "MID", "LOW"):
+            cnt = season_counts.get(s_code, 0)
+            mult = SEASON_MULTIPLIERS[s_code]
+            file.write(f"- {s_code} (multiplier {mult}x): {format_number(cnt)} rows ({cnt / rows * 100:.2f}%)\n")
 
         write_section(file, "2. SCHEMA")
         file.write("Columns and data types:\n\n")
@@ -193,12 +236,15 @@ def run_f1_audit(csv_path: Path = DEFAULT_CSV_PATH, output_dir: Path = DEFAULT_O
         file.write("\nAudit completed successfully.\n")
 
     return {
+        "catalog_version": CATALOG_VERSION,
         "rows": rows,
         "columns": columns,
         "total_nulls": total_nulls,
         "literal_null_tokens": literal_nulls,
         "literal_na_children": literal_na_children,
         "zero_guests_count": zero_guests_count,
+        "mapped_hotels": mapped_hotels,
+        "pt_season_distribution": season_counts,
         "adr": {
             "min": round(adr_min, 2),
             "max": round(adr_max, 2),
@@ -225,7 +271,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args()
     res = run_f1_audit(args.csv_path, args.output_dir)
-    print(f"F1 Audit completed: {res['rows']:,} rows, {res['columns']} cols | Outliers: {res['adr']['outlier_count']:,} ({res['adr']['outlier_percent']}%)")
+    print(f"F1 Audit completed (Catalog v{res['catalog_version']}): {res['rows']:,} rows, {res['columns']} cols | Outliers: {res['adr']['outlier_count']:,} ({res['adr']['outlier_percent']}%)")
 
 
 if __name__ == "__main__":

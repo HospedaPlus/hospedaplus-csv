@@ -1,13 +1,13 @@
 """
 US-25 / US-26 / US-5 — Traditional Agency File Generator (F4).
 
-Generates weekly CSV files for 15 traditional travel agencies using two alternating
-column layouts (Layout A and Layout B) to simulate heterogeneous external formats
-(Section 5.2). Injects two configurable data-quality defects (Section 5.3 / US-26):
-  - Defect 3: Missing currency codes (--missing-currency-rate, default 0.10)
-  - Defect 4: Cross-channel duplicate bookings cloned from F2 reservation.created
-              events with slight guest-name variations and +/-1 day check-in shifts
-              to test RN-08 deduplication in Spark Silver.
+Aligned with shared catalog.json (v1.1.0):
+  - Uses the 15 official agency channels (AG01..AG15) and commission_pct (10% -> 0.10)
+  - Uses the 28 official hotel codes (HP-PT-001 .. HP-ES-003)
+  - Uses the 4 official room types (SINGLE, DOUBLE, TWIN, SUITE)
+  - Uses catalog-approved currencies (hotel local currency or USD accepted from agencies)
+  - Injects Defect 3 (--missing-currency-rate, default 0.10) and Defect 4 (cross-channel
+    duplicates cloned from F2 reservation.created events with +/-1 day check-in shift).
 """
 
 from __future__ import annotations
@@ -21,18 +21,21 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from buenavista_csv.catalog import (
+    ALLOWED_ROOM_TYPES,
+    CATALOG_VERSION,
+    F4_AGENCIES,
+    HOTEL_CODES,
+    HOTELS_BY_CODE,
+    LEGACY_HOTEL_MAP,
+)
 from buenavista_csv.defects import DEFAULT_DEFECT_RATES
 
 
 DEFAULT_F2_EVENTS_PATH = Path(__file__).resolve().parents[2] / "data" / "f2_reference" / "events.jsonl"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output" / "f4_agency_files"
 
-AGENCY_NAMES = [
-    "ViajaFacil", "SolyMar Tours", "EuroTrip Agency", "Andes Travel",
-    "GlobalStay Agency", "CaribeViajes", "MontanaTours", "CostaBella Travel",
-    "NorteSur Agencia", "Horizonte Viajes", "Rutas del Sur", "BlueSky Agency",
-    "Destino Feliz", "Puerta del Sol Travel", "Viajes Amanecer",
-]
+AGENCY_NAMES = [ag["name"] for ag in F4_AGENCIES]
 
 FIRST_NAMES = [
     "Maria", "Carlos", "Ana", "John", "Laura", "Pedro", "Sofia", "Lucas",
@@ -42,8 +45,6 @@ LAST_NAMES = [
     "Garcia", "Silva", "Smith", "Lopez", "Santos", "Martinez", "Ferreira",
     "Rossi", "Fernandez", "Gomez", "Pereira", "Costa",
 ]
-
-AGENCY_COMMISSION_RATE = 0.10  # RN-02: traditional agency 10%
 
 LAYOUT_A_COLUMNS = [
     "agency_booking_id", "guest_name", "hotel_id", "check_in", "check_out",
@@ -79,9 +80,15 @@ def _vary_name(name: str, rng: random.Random) -> str:
     return f"{parts[0]} {parts[-1].lower()}"
 
 
+def _normalize_hotel_code(code: str) -> str:
+    """Ensure any legacy 'hotel-001' reference is translated to canonical 'HP-XX-NNN'."""
+    return LEGACY_HOTEL_MAP.get(code, code)
+
+
 @dataclass
 class AgencyBooking:
     agency_booking_id: str
+    agency_code: str
     agency_name: str
     hotel_id: str
     guest_name: str
@@ -105,6 +112,7 @@ def _load_f2_reservations(f2_events_path: Path) -> list[dict]:
                 continue
             ev = json.loads(line)
             if ev.get("event_type") == "reservation.created":
+                ev["hotel_id"] = _normalize_hotel_code(ev.get("hotel_id", ""))
                 reservations.append(ev)
     return reservations
 
@@ -138,6 +146,7 @@ def generate_agency_files(
         )
 
     summary = {
+        "catalog_version": CATALOG_VERSION,
         "agencies": {},
         "duplicates_created": [],
         "warning": warning,
@@ -147,23 +156,28 @@ def generate_agency_files(
     }
     booking_counter = 0
 
-    for agency_idx, agency_name in enumerate(AGENCY_NAMES, start=1):
+    for agency_idx, agency_info in enumerate(F4_AGENCIES, start=1):
+        agency_code = agency_info["code"]  # AG01 .. AG15 from catalog.json
+        agency_name = agency_info["name"]
+        commission_rate = round(float(agency_info["commission_pct"]) / 100.0, 4)  # 10 -> 0.10
         layout = LAYOUT_A_COLUMNS if agency_idx % 2 == 0 else LAYOUT_B_COLUMNS
         rows: list[AgencyBooking] = []
 
         for _ in range(bookings_per_agency):
             booking_counter += 1
-            hotel_id = rng.choice([f"hotel-{i:03d}" for i in range(1, 29)])
+            hotel_id = rng.choice(HOTEL_CODES)
             check_in = datetime(2026, 11, 1) + timedelta(days=rng.randint(0, 90))
             check_out = check_in + timedelta(days=rng.randint(1, 6))
             guest_name = f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}"
-            room_type = rng.choice(["SINGLE", "DOUBLE", "TWIN", "SUITE"])
-            currency = None if rng.random() < missing_currency_rate else rng.choice(["EUR", "USD"])
+            room_type = rng.choice(ALLOWED_ROOM_TYPES)
+            hotel_currency = HOTELS_BY_CODE[hotel_id]["currency"]
+            currency = None if rng.random() < missing_currency_rate else rng.choice([hotel_currency, "USD"])
             total_amount = round(rng.uniform(80, 2000), 2)
 
             rows.append(
                 AgencyBooking(
-                    agency_booking_id=f"AG{agency_idx:02d}-{booking_counter:05d}",
+                    agency_booking_id=f"{agency_code}-{booking_counter:05d}",
+                    agency_code=agency_code,
                     agency_name=agency_name,
                     hotel_id=hotel_id,
                     guest_name=guest_name,
@@ -172,7 +186,7 @@ def generate_agency_files(
                     room_type=room_type,
                     currency=currency,
                     total_amount=total_amount,
-                    commission_rate=AGENCY_COMMISSION_RATE,
+                    commission_rate=commission_rate,
                 )
             )
 
@@ -184,9 +198,10 @@ def generate_agency_files(
             data = source_ev["data"]
 
             dup_row = AgencyBooking(
-                agency_booking_id=f"AG{agency_idx:02d}-{booking_counter:05d}",
+                agency_booking_id=f"{agency_code}-{booking_counter:05d}",
+                agency_code=agency_code,
                 agency_name=agency_name,
-                hotel_id=source_ev["hotel_id"],
+                hotel_id=_normalize_hotel_code(source_ev["hotel_id"]),
                 guest_name=varied_name,
                 check_in=(
                     datetime.strptime(data["check_in"], "%Y-%m-%d")
@@ -196,11 +211,12 @@ def generate_agency_files(
                 room_type=data["room_type"],
                 currency=data["currency"],
                 total_amount=data["total_amount"],
-                commission_rate=AGENCY_COMMISSION_RATE,
+                commission_rate=commission_rate,
                 duplicate_of_reservation_id=source_ev["reservation_id"],
             )
             rows.append(dup_row)
             summary["duplicates_created"].append({
+                "agency_code": agency_code,
                 "agency": agency_name,
                 "agency_booking_id": dup_row.agency_booking_id,
                 "original_reservation_id": source_ev["reservation_id"],
@@ -232,6 +248,7 @@ def generate_agency_files(
                     ])
 
         summary["agencies"][agency_name] = {
+            "channel_code": agency_code,
             "file": file_path.name,
             "rows": len(rows),
             "layout": "A" if layout is LAYOUT_A_COLUMNS else "B",
@@ -245,7 +262,7 @@ def generate_agency_files(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate F4 weekly agency CSV files.")
+    parser = argparse.ArgumentParser(description="Generate F4 weekly agency CSV files (Catalog v1.1.0).")
     parser.add_argument("--f2-events", type=Path, default=DEFAULT_F2_EVENTS_PATH)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--seed", type=int, default=7)
@@ -262,7 +279,7 @@ def main() -> None:
         duplicate_count=args.duplicate_count,
         missing_currency_rate=args.missing_currency_rate,
     )
-    print(f"Generated {len(summary['agencies'])} F4 agency CSVs ({summary['total_rows']} total rows).")
+    print(f"Generated {len(summary['agencies'])} F4 agency CSVs ({summary['total_rows']} total rows, Catalog v{summary['catalog_version']}).")
     print(f"Cross-channel duplicates injected: {len(summary['duplicates_created'])}")
     print(f"Missing currency rows: {summary['rows_missing_currency']}/{summary['total_rows']}")
 

@@ -1,4 +1,4 @@
 agency_booking_id,guest_name,hotel_id,check_in,check_out,room_type,currency,total_amount,commission_rate
-AG99-00001,Carlos Gomez,hotel-001,2026-11-10,2026-11-12,SINGLE,USD,450.00,0.1
-AG99-00002,,hotel-999,2026-11-15,2026-11-12,PENTHOUSE,GBP,not_a_number,1.5
-AG99-00001,Carlos Gomez,hotel-001,2026-11-10,2026-11-12,SINGLE,,450.00,0.1
+AG01-00001,Carlos Gomez,HP-CO-001,2026-11-10,2026-11-12,SINGLE,USD,450.00,0.1
+AG01-00002,,hotel-999,2026-11-15,2026-11-12,PENTHOUSE,GBP,not_a_number,1.5
+AG01-00001,Carlos Gomez,HP-CO-001,2026-11-10,2026-11-12,SINGLE,,450.00,0.1

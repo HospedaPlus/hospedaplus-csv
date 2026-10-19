@@ -1,6 +1,8 @@
 {
+  "catalog_version": "1.1.0",
   "f1_validation": {
     "source": "F1",
+    "catalog_version": "1.1.0",
     "file": "hotel_bookings.csv",
     "rows": 119390,
     "valid_schema": true,
@@ -108,7 +110,8 @@
   },
   "f4_validation": {
     "source": "F4",
-    "directory": "output\\f4_agency_files",
+    "catalog_version": "1.1.0",
+    "directory": "/working_dir/c_37d2d685a743c49f/buenavista-csv/output/f4_agency_files",
     "agency_files_found": 15,
     "expected_agency_files": 15,
     "total_rows": 183,

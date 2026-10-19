@@ -57,5 +57,26 @@
     "adr_iqr_lower_bound": -15.77,
     "adr_iqr_upper_bound": 211.06,
     "min_total_guests": 1
+  },
+  "catalog_version": "1.1.0",
+  "f1_hotel_mapping": {
+    "City Hotel": {
+      "code": "HP-PT-001",
+      "name": "HospedaPlus Lisboa City",
+      "category": "urban",
+      "country": "PT",
+      "currency": "EUR",
+      "timezone": "Europe/Lisbon",
+      "rooms": 207
+    },
+    "Resort Hotel": {
+      "code": "HP-PT-002",
+      "name": "HospedaPlus Algarve Resort",
+      "category": "resort",
+      "country": "PT",
+      "currency": "EUR",
+      "timezone": "Europe/Lisbon",
+      "rooms": 171
+    }
   }
 }
