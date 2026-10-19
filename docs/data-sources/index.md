@@ -38,6 +38,7 @@ Within this topology, **F1** and **F4** serve as the foundational file-based inp
 
 ### End-to-End Data Flow across the Medallion Architecture
 ```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 80, 'htmlLabels': true}, 'themeVariables': {'fontSize': '16px'}}}%%
 flowchart TD
     A["1. Sources & Shared Catalog<br/>(buenavista-csv — Catalog v1.1.0)<br/><br/>• F1: data/f1_historical/hotel_bookings.csv<br/>119,390 rows → mapped to HP-PT-001 & HP-PT-002<br/><br/>• F4: output/f4_agency_files/*_week.csv<br/>15 weekly agency CSVs, AG01..AG15, Layouts A & B<br/><br/>• Contract: schemas/catalog.json<br/>28 HP-XX-NNN hotels, 4,000 rooms, 5 currencies, RN-05 rules"]
 
