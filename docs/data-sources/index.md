@@ -38,7 +38,6 @@ Within this topology, **F1** and **F4** serve as the foundational file-based inp
 
 ### End-to-End Data Flow across the Medallion Architecture
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 80, 'htmlLabels': true}, 'themeVariables': {'fontSize': '16px'}}}%%
 flowchart TD
     A["1. Sources & Shared Catalog<br/>(buenavista-csv — Catalog v1.1.0)<br/><br/>• F1: data/f1_historical/hotel_bookings.csv<br/>119,390 rows → mapped to HP-PT-001 & HP-PT-002<br/><br/>• F4: output/f4_agency_files/*_week.csv<br/>15 weekly agency CSVs, AG01..AG15, Layouts A & B<br/><br/>• Contract: schemas/catalog.json<br/>28 HP-XX-NNN hotels, 4,000 rooms, 5 currencies, RN-05 rules"]
 
@@ -146,16 +145,7 @@ When all **119,390** `adr` values in `hotel_bookings.csv` are sorted in ascendin
 
 To establish the mathematical boundary between normal pricing and statistical outliers, the IQR method subtracts and adds `1.5 × IQR` (`1.5 × 56.71 = 85.065`) from the quartiles:
 
-```
-Lower Bound = Q1 - 1.5 * IQR = 69.29 - 85.065 = -15.77
-Upper Bound = Q3 + 1.5 * IQR = 126.00 + 85.065 = 211.06
-
-      Outlier Zone (< -15.77)              Normal IQR Core (50% of data)            Outlier Zone (> 211.06)
-  <------------------------------|       +-------------------------------+       |------------------------------>
-  Min: -6.38 (Negative error)    |       | Q1: 69.29  | Med: 94.58  | Q3: 126.00 |  3,793 bookings (3.18%)
-                                -15.77   +-------------------------------+     211.06  Max: 5,400.00 (Giant outlier)
-
-```
+<img width="1774" height="887" alt="Infografía del Rango Intercuartílico (IQR)" src="https://github.com/user-attachments/assets/e75fd6e3-446a-4fff-828e-eada93ef9194" />
 
 Our automated audit (`buenavista_csv.f1_audit`) identified **3,793 bookings (`3.18%`)** above the upper Tukey fence of `211.06` (and **5,753 bookings** when combining upper statistical outliers with non-positive rates `<= 0.00`).
 
