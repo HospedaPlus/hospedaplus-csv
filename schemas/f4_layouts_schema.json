@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "F4_Traditional_Agency_Files_Contract",
   "catalog_version": "1.1.0",
-  "description": "Schema contract for F4 weekly traditional agency CSV exports aligned with shared catalog v1.1.0.",
+  "description": "Contract for F4 weekly agency files (one per agency and ISO week, CSV or Excel) aligned with shared catalog v1.1.0. Every row carries the arguments of operation.reservar().",
   "expected_agency_count": 15,
   "agencies": [
     {
@@ -81,7 +81,7 @@
       "commission_pct": 10
     }
   ],
-  "file_naming_pattern": "^[a-z0-9_]+_week\\.csv$",
+  "file_naming_pattern": "^AG(0[1-9]|1[0-5])_\\d{4}-W\\d{2}\\.(csv|xlsx)$",
   "commission_rate_expected": 0.1,
   "allowed_hotel_codes": [
     "HP-PT-001",
@@ -129,41 +129,131 @@
   "reporting_currency": "COP",
   "layouts": {
     "A": {
-      "description": "Even-indexed agencies (AG02, AG04, AG06, AG08, AG10, AG12, AG14)",
+      "format": "csv",
+      "description": "Even agencies (AG02, AG04, AG06, AG08, AG10, AG12, AG14). rate_type REFUNDABLE/NON_REFUNDABLE, commission as fraction (0.1).",
       "columns": [
         "agency_booking_id",
+        "guest_ref",
         "guest_name",
         "hotel_id",
         "check_in",
         "check_out",
         "room_type",
+        "rooms",
+        "adults",
+        "children",
+        "rate_type",
         "currency",
         "total_amount",
         "commission_rate"
       ]
     },
     "B": {
-      "description": "Odd-indexed agencies (AG01, AG03, AG05, AG07, AG09, AG11, AG13, AG15)",
+      "format": "csv",
+      "description": "Odd agencies not on Excel (AG01, AG05, AG09, AG13). non_refundable Y/N, commission in percent (10).",
       "columns": [
         "booking_ref",
         "hotel_id",
+        "guest_code",
         "guest_full_name",
         "checkin_date",
         "checkout_date",
         "room_category",
+        "num_rooms",
+        "pax_adults",
+        "pax_children",
+        "non_refundable",
         "amount",
         "currency",
         "commission_pct"
       ]
+    },
+    "C": {
+      "format": "xlsx",
+      "description": "Excel agencies (AG03, AG07, AG11, AG15). Spanish headers, date cells, tarifa reembolsable/no_reembolsable, commission as fraction.",
+      "columns": [
+        "localizador",
+        "cod_huesped",
+        "nombre_huesped",
+        "hotel",
+        "fecha_llegada",
+        "fecha_salida",
+        "tipo_habitacion",
+        "habitaciones",
+        "adultos",
+        "ninos",
+        "tarifa",
+        "importe",
+        "moneda",
+        "comision"
+      ]
     }
   },
   "canonical_mapping": {
-    "booking_ref": "agency_booking_id",
-    "guest_full_name": "guest_name",
-    "checkin_date": "check_in",
-    "checkout_date": "check_out",
-    "room_category": "room_type",
-    "amount": "total_amount",
-    "commission_pct": "commission_rate"
-  }
+    "A": {
+      "agency_booking_id": "agency_booking_id",
+      "guest_ref": "guest_ref",
+      "guest_name": "guest_name",
+      "hotel_id": "hotel_id",
+      "check_in": "check_in",
+      "check_out": "check_out",
+      "room_type": "room_type",
+      "rooms": "rooms",
+      "adults": "adults",
+      "children": "children",
+      "refundable": "rate_type",
+      "currency": "currency",
+      "total_amount": "total_amount",
+      "commission_rate": "commission_rate"
+    },
+    "B": {
+      "agency_booking_id": "booking_ref",
+      "guest_ref": "guest_code",
+      "guest_name": "guest_full_name",
+      "hotel_id": "hotel_id",
+      "check_in": "checkin_date",
+      "check_out": "checkout_date",
+      "room_type": "room_category",
+      "rooms": "num_rooms",
+      "adults": "pax_adults",
+      "children": "pax_children",
+      "refundable": "non_refundable",
+      "currency": "currency",
+      "total_amount": "amount",
+      "commission_rate": "commission_pct"
+    },
+    "C": {
+      "agency_booking_id": "localizador",
+      "guest_ref": "cod_huesped",
+      "guest_name": "nombre_huesped",
+      "hotel_id": "hotel",
+      "check_in": "fecha_llegada",
+      "check_out": "fecha_salida",
+      "room_type": "tipo_habitacion",
+      "rooms": "habitaciones",
+      "adults": "adultos",
+      "children": "ninos",
+      "refundable": "tarifa",
+      "currency": "moneda",
+      "total_amount": "importe",
+      "commission_rate": "comision"
+    }
+  },
+  "folder_pattern": "output/f4_agency_files/<YYYY-Www>/",
+  "canonical_fields": [
+    "agency_booking_id",
+    "guest_ref",
+    "guest_name",
+    "hotel_id",
+    "check_in",
+    "check_out",
+    "room_type",
+    "rooms",
+    "adults",
+    "children",
+    "refundable",
+    "currency",
+    "total_amount",
+    "commission_rate"
+  ]
 }

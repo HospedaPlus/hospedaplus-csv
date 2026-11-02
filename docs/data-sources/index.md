@@ -13,7 +13,7 @@ tags: \[data-sources, f1, f4, batch-layer, medallion-bronze, data-quality, spark
 | **Canonical Repository** | `buenavista-csv` | 
 | **Domain Owner** | Oscar Corzo (Data Engineering — File Sources Domain) | 
 | **Shared Reference Contract** | `schemas/catalog.json` (**Catalog Version `1.1.0`** — synchronized across `F1`–`F7`) | 
-| **Covered Sources** | **F1** (`hotel_bookings.csv` — Kaggle Historical CSV) and **F4** (`*_week.csv` — Simulated Traditional Agency Files) | 
+| **Covered Sources** | **F1** (`hotel_bookings.csv` — Kaggle Historical CSV) and **F4** (`<AGxx>_<YYYY-Www>.csv` / `.xlsx` — Simulated Traditional Agency Files) | 
 | **Architectural Layer** | **Batch Layer** (Daily / Weekly Scheduled Ingestion → Amazon S3 `Bronze` → PySpark `Silver` & `Gold`) | 
 | **Related User Stories** | `US-11` (F1 Exploration & IQR Audit), `US-14` (Defects Catalog), `US-24` (F2 Event Coupling), `US-25` (F4 Generator), `US-26` (Configurable Defect Injection), `US-5` (Repo Separation), `US-6` (Quality Controls & Batch Readiness) | 
 | **Business Rules Supported** | `RN-01` (Occupancy, Net ADR, Net RevPAR), `RN-02` (Channel Commissions), `RN-03` (90-Day Cancellation Baseline for Overbooking), `RN-05` (Season & 14-Day YoY Pickup Multipliers), `RN-06` (Event Multiplier `1.15x`), `RN-08` (Cross-Channel Deduplication ±1 Day), `RN-11` (Guest PII Pseudonymization) | 
@@ -141,86 +141,68 @@ Our automated audit (`buenavista_csv.f1_audit`) identified **3,793 bookings (`3.
 
    * **Impact on Ingestion**: A booking with zero occupants is logically invalid for guest-count analytics and must be filtered out during the Bronze → Silver transformation (`adults + children + babies >= 1`).
 
-## 3. Source F4: Traditional Agency Files (`*_week.csv`) Simulates Heterogeneous Weekly Drops and Cross-Channel Duplicates
+## 3. Source F4: Traditional Agency Files (one CSV/Excel file per agency and week)
 
 ### Provenance, Scope, and Catalog v1.1.0 Alignment (US-25 & US-26)
 
-Traditional travel agencies send weekly booking spreadsheets via batch file transfer. Per **Section 5**, **Section 5.2**, and **`schemas/catalog.json` (`v1.1.0`)**, F4 is a simulated source owned by `buenavista-csv` (`buenavista_csv.f4_generator`) that produces **15 weekly CSV files** (one per agency channel `AG01`..`AG15`) with deterministic seeding (`--seed 7`).
+Traditional travel agencies send a weekly booking file. Per **Section 5**, **Section 5.2**, and **`schemas/catalog.json` (`v1.1.0`)**, F4 is a simulated source owned by `buenavista-csv` (`buenavista_csv.f4_generator`) that produces **one file per agency (`AG01`..`AG15`) and per ISO week**, in CSV or Excel, with deterministic seeding (`--seed 7` + week).
 
-| Parameter | Specification (`Catalog v1.1.0`) | 
-| ----- | ----- | 
-| **Source ID & Name** | **F4** — Traditional Agency Files (`Archivos de agencias tradicionales`) | 
-| **Generator Module** | `src/buenavista_csv/f4_generator.py` (CLI: `generate-f4`) | 
-| **Output Location** | `output/f4_agency_files/<agency_slug>_week.csv` + `_generation_summary.json` | 
-| **Catalog Agency Channels (`AG01`..`AG15`)** | `AG01` (`ViajaFacil`), `AG02` (`SolyMar Tours`), `AG03` (`EuroTrip Agency`), `AG04` (`Andes Travel`), `AG05` (`GlobalStay Agency`), `AG06` (`CaribeViajes`), `AG07` (`MontanaTours`), `AG08` (`CostaBella Travel`), `AG09` (`NorteSur Agencia`), `AG10` (`Horizonte Viajes`), `AG11` (`Rutas del Sur`), `AG12` (`BlueSky Agency`), `AG13` (`Destino Feliz`), `AG14` (`Puerta del Sol Travel`), `AG15` (`Viajes Amanecer`) | 
-| **Target Hotels (`28` properties)** | Official `catalog.json` codes: `HP-PT-001`..`003`, `HP-CO-001`..`010`, `HP-MX-001`..`006`, `HP-BR-001`..`006`, `HP-ES-001`..`003` (**4,000 rooms**) | 
-| **Accepted Currencies** | Hotel's native currency (`COP`, `MXN`, `BRL`, `EUR`) or **`USD`** (*"accepted from agencies (F4); not a hotel currency"*) | 
-| **Ingestion Frequency** | **Weekly Batch** (`15 CSV files/week`; default `12` regular bookings/agency + `3` cloned cross-channel duplicates = **183 rows/week**) | 
-| **Commission Rule (`RN-02`)** | Traditional agency rate fixed at **`10%` (`commission_pct: 10` → `0.10`)** in `catalog.json` (vs. `18%` for F2 OTAs and `0%` for F3 Direct/Corporate) | 
+| Parameter | Specification (`Catalog v1.1.0`) |
+| ----- | ----- |
+| **Source ID & Name** | **F4** — Traditional Agency Files (`Archivos de agencias tradicionales`) |
+| **Generator Module** | `src/buenavista_csv/f4_generator.py` (CLI: `generate-f4 --week 2026-W45`) |
+| **Loader Module** | `src/buenavista_csv/f4_loader.py` (CLI: `load-f4 --week-dir ...`): books every row in Neon through `operation.reservar()` |
+| **Output Location** | `output/f4_agency_files/<YYYY-Www>/<AGxx>_<YYYY-Www>.csv` or `.xlsx` + `_generation_summary.json` |
+| **Catalog Agency Channels (`AG01`..`AG15`)** | `AG01` (`ViajaFacil`) .. `AG15` (`Viajes Amanecer`), `commission_pct = 10` |
+| **Target Hotels (`28` properties)** | `HP-PT-001`..`003`, `HP-CO-001`..`010`, `HP-MX-001`..`006`, `HP-BR-001`..`006`, `HP-ES-001`..`003` |
+| **Guests** | `guest_ref` `G-0000001`..`G-0060000`: the same pseudonymous guest catalog as F2 events and the F3 seed |
+| **Accepted Currencies** | Hotel currency (`COP`, `MXN`, `BRL`, `EUR`) or **`USD`** |
+| **Amounts** | Base rate of the F3 seed × resort factor × country season, per night and room (USD quotes use a fixed simulation rate; real conversion uses F7) |
+| **Ingestion Frequency** | **Weekly** — 15 files/week; default 12 bookings/agency + 3 cross-channel duplicates = **183 rows/week** |
 
-### Alternating Schema Contracts: Layout A vs. Layout B
+### Three Formats (Section 5.2: "agencias con formatos distintos")
 
-To faithfully simulate Section 5.2 (*"F4: agencias con formatos distintos"* / *"agencies with different formats"*) without requiring 15 bespoke parsers, the generator alternates between **two distinct CSV column schemas** based on agency index:
+| Layout | Agencies | Format | Differences |
+| ----- | ----- | ----- | ----- |
+| **A** | AG02, AG04, AG06, AG08, AG10, AG12, AG14 | CSV | English headers, `rate_type` `REFUNDABLE`/`NON_REFUNDABLE`, commission `0.1` |
+| **B** | AG01, AG05, AG09, AG13 | CSV | Other headers and column order, `non_refundable` `Y`/`N`, commission in percent `10.0` |
+| **C** | AG03, AG07, AG11, AG15 | Excel `.xlsx` | Spanish headers, real date cells, `tarifa` `reembolsable`/`no_reembolsable` |
 
-* **Layout A (Even-indexed agencies `AG02, AG04, AG06, AG08, AG10, AG12, AG14` — 7 agencies, e.g., `solymar_tours_week.csv`)**:
+```
+# Layout A (AG02_2026-W45.csv)
+agency_booking_id,guest_ref,guest_name,hotel_id,check_in,check_out,room_type,rooms,adults,children,rate_type,currency,total_amount,commission_rate
+AG02-2026W45-0001,G-0020245,Pedro Pereira,HP-CO-003,2027-01-31,2027-02-02,SUITE,1,3,0,REFUNDABLE,COP,1258000,0.1
 
-  ```
-  agency_booking_id,guest_name,hotel_id,check_in,check_out,room_type,currency,total_amount,commission_rate
-  AG02-00014,Sofia Rossi,HP-CO-002,2026-12-02,2026-12-06,SINGLE,USD,1134.92,0.1
-  AG02-00019,Julia Ferreira,HP-CO-010,2026-11-14,2026-11-18,SINGLE,COP,926.0,0.1
-  
-  ```
+# Layout B (AG01_2026-W45.csv)
+booking_ref,hotel_id,guest_code,guest_full_name,checkin_date,checkout_date,room_category,num_rooms,pax_adults,pax_children,non_refundable,amount,currency,commission_pct
+AG01-2026W45-0002,HP-PT-001,G-0026178,Sofia Silva,2027-02-11,2027-02-17,DOUBLE,1,2,0,N,612.0,EUR,10.0
 
-* **Layout B (Odd-indexed agencies `AG01, AG03, AG05, AG07, AG09, AG11, AG13, AG15` — 8 agencies, e.g., `viajafacil_week.csv`)**:
+# Layout C (AG07_2026-W45.xlsx, sheet "reservas")
+localizador | cod_huesped | nombre_huesped | hotel | fecha_llegada | fecha_salida | tipo_habitacion | habitaciones | adultos | ninos | tarifa | importe | moneda | comision
+```
 
-  ```
-  booking_ref,hotel_id,guest_full_name,checkin_date,checkout_date,room_category,amount,currency,commission_pct
-  AG01-00001,HP-BR-002,Rafael Fernandez,2026-11-07,2026-11-08,SINGLE,1826.63,BRL,0.1
-  AG01-00005,HP-MX-005,Carlos Gomez,2027-01-27,2027-01-29,DOUBLE,1163.59,MXN,0.1
-  
-  ```
+`buenavista_csv.f4_layouts` reads any of the three into one canonical row (the full mapping is in `schemas/f4_layouts_schema.json`):
 
-#### Canonical Schema Reconciliation Table (Layout A ↔ Layout B → Silver)
+`agency_booking_id, guest_ref, guest_name, hotel_id, check_in, check_out, room_type, rooms, adults, children, refundable, currency, total_amount, commission_rate`
 
-| Canonical Silver Field | Layout A Column (Pos) | Layout B Column (Pos) | Data Type | Catalog `v1.1.0` Validation & Business Rules | 
-| ----- | ----- | ----- | ----- | ----- | 
-| `reservation_source_id` | `agency_booking_id` (Col 1) | `booking_ref` (Col 1) | `STRING` | Prefix matches `AG01`..`AG15` (`AG<01..15>-<00001..99999>`); non-null, unique per file | 
-| `guest_name_raw` | `guest_name` (Col 2) | `guest_full_name` (Col 3) | `STRING` | Used in Bronze/Silver staging for fuzzy deduplication (`RN-08`), then replaced by `guest_id_hash` (`RN-11`, `CA-10`) | 
-| `hotel_id` | `hotel_id` (Col 3) | `hotel_id` (Col 2) | `STRING` | Must exist in `catalog.hotels[].code` (`HP-PT-001` .. `HP-ES-003`) | 
-| `check_in` | `check_in` (Col 4) | `checkin_date` (Col 4) | `DATE` | ISO-8601 `YYYY-MM-DD`; mapped to country season (`LOW`, `MID`, `HIGH`) via `catalog.seasons` | 
-| `check_out` | `check_out` (Col 5) | `checkout_date` (Col 5) | `DATE` | ISO-8601 `YYYY-MM-DD`; must satisfy `check_out > check_in` | 
-| `room_type` | `room_type` (Col 6) | `room_category` (Col 6) | `STRING` | Must exist in `catalog.room_types[].code`: `SINGLE`, `DOUBLE`, `TWIN`, `SUITE` | 
-| `currency` | `currency` (Col 7) | `currency` (Col 8) | `STRING` | Must exist in `catalog.currencies[].code`: `COP`, `MXN`, `BRL`, `EUR`, `USD` (or `""` under **Defect 3**) | 
-| `total_amount` | `total_amount` (Col 8) | `amount` (Col 7) | `DECIMAL(12,2)` | Gross reservation amount (`> 0`); converted to `reporting_currency = "COP"` via F7 | 
-| `commission_rate` | `commission_rate` (Col 9) | `commission_pct` (Col 9) | `DECIMAL(5,4)` | `0.10` (`10%` traditional agency commission per `RN-02` and `catalog.channels`) | 
+The agency code comes from the file name, so it is never trusted from the content.
 
-### Deliberate Data-Quality Defect Injection (Section 5.3, US-14, US-24, US-25, US-26)
+### Deliberate Data-Quality Defects (Section 5.3, US-14, US-26)
 
-Source F4 injects **two of the five mandatory data-quality defects** catalogued in `US-14` and standardized in `US-26`:
+1. **Defect 3 — missing currency** (`--missing-currency-rate`, default `0.10`). The amount stays in the hotel currency, so the fix (use `catalog.hotels[hotel_id].currency` and flag `currency_inferred = true`) is correct, both in the loader and in Silver.
+2. **Defect 4 — cross-channel duplicates** (`--duplicate-count`, RN-08). A real F2 booking is copied with the **same `guest_ref`**, hotel and room type, a slightly changed name (`swap_order`, `middle_initial`, `typo`, `drop_accent_like`) and check-in ±1 day. With `--database-url` (or `NEON_READ_URL`, role `etl_reader`) the F2 bookings are read from `operation.reservations` in Neon; without it, from `data/f2_reference/events.jsonl` (offline and tests). The lineage is in `_generation_summary.json`.
 
-#### 1. Defect 3 — Missing Currency in Agency Files (`--missing-currency-rate`)
+### Loading into Neon (single write path for inventory)
 
-* **Business Impact**: Without an explicit ISO currency code (`COP`, `MXN`, `BRL`, `EUR`, or `USD`), `total_amount` cannot be directly converted to `reporting_currency = "COP"` via the **F7 (Frankfurter Exchange Rate API)**.
+`f4_loader` books every row through `operation.reservar()` — the same function F2 and F3 use — so agency sales also respect the overbooking limit and are rejected when the hotel is full (RN-03, RN-04):
 
-* **Catalog-Driven Imputation in Silver**: Thanks to `catalog.json` (`v1.1.0`), when PySpark encounters a row with an empty `currency` in Bronze (`14/183 rows` = `7.7%` at default `--missing-currency-rate 0.10`, `seed=7`), it can deterministically impute the hotel's native currency via `catalog.hotels[hotel_id].currency` (e.g., `AG01-00007` at `HP-MX-002` → `MXN`; `AG02-00016` at `HP-CO-002` → `COP`) while flagging `is_currency_imputed = true`.
+* Invalid rows (unknown hotel, bad dates, guests that do not fit...) are reported and never sent.
+* Missing currency → hotel currency, `currency_inferred = true`.
+* Billed in the hotel currency → the agency nightly rate is stored; billed in USD → `reservar()` prices from `operation.rates`.
+* Idempotent: `(agency code, agency booking id)` is unique, so loading a week twice returns `already_exists`.
+* Each row runs in its own transaction; the result of every row is written to `<week>/_load_report.json` (`confirmed`, `already_exists`, `rejected`, `invalid`, `error`).
 
-#### 2. Defect 4 — Cross-Channel Duplicate Bookings (`--duplicate-count`, F4 ↔ F2 Coupling)
-
-* **Business Rule (`RN-08` & `CA-06`)**: *"A duplicate reservation across channels (same guest, hotel, and dates within ±1 day) is flagged and the booking from the channel with the lower commission prevails."*
-
-* **Cross-Story Architectural Coupling (`US-12` → `US-24` → `US-25`)**:
-
-  1. `f4_generator.py` loads `reservation.created` events from **F2 (`data/f2_reference/events.jsonl`)**, automatically normalizing any legacy hotel IDs to canonical `HP-XX-NNN` codes via `LEGACY_HOTEL_MAP`.
-
-  2. Derives a deterministic canonical guest name from `reservation_id` (`_derive_guest_name()`), applies one of four transcription mutations (`swap_order`, `middle_initial`, `typo`, `drop_accent_like`), and shifts `check_in` by `rng.choice([-1, 0, +1])` days.
-
-#### Verified Cross-Channel Duplicate Lineage (`_generation_summary.json`, Seed = 7, Catalog v1.1.0)
-
-| F4 Agency File (`Channel`) | F4 Booking ID | Cloned F2 `reservation_id` | Original F2 Channel (Commission) | F4 Agency Commission | Canonical F2 Guest | Mutated F4 Guest | Hotel Code (`Catalog v1.1.0`) | Currency | Check-In Shift | RN-08 Winning Channel | 
-| ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ----- | 
-| `viajafacil_week.csv` (`AG01`) | `AG01-00013` | `res-10024` | `booking_channel_a` (`18%`) | `AG01` (`10%`) | `Diego Ferreira` | `Diego ferreira` | `HP-BR-003` (*Salvador Barra*) | `BRL` | `0 days` (`2026-11-11`) | **F4 `AG01` (`10%` < `18%`)** | 
-| `solymar_tours_week.csv` (`AG02`) | `AG02-00026` | `res-10012` | `expedia` (`18%`) | `AG02` (`10%`) | `Patricia Rossi` | `Patricia Rossi` | `HP-PT-001` (*Lisboa City*) | `EUR` | `-1 day` (`11-07` vs `11-08`) | **F4 `AG02` (`10%` < `18%`)** | 
-| `eurotrip_agency_week.csv` (`AG03`) | `AG03-00039` | `res-10029` | `direct_ota` (`18%`) | `AG03` (`10%`) | `Elena Santos` | `Elena santos` | `HP-CO-003` (*Cartagena Centro*) | `COP` | `-1 day` (`01-25` vs `01-26`) | **F4 `AG03` (`10%` < `18%`)** | 
+Duplicates are booked too (agencies did sell them); RN-08 decides in Silver/Gold which one prevails (lowest commission).
 
 ## 4. Consumption Strategy, S3 Partitioning, and PySpark Transformation Contract
 
@@ -237,7 +219,7 @@ Source F4 injects **two of the five mandatory data-quality defects** catalogued 
 | **`RN-01` & `RN-02`** (Net ADR & RevPAR in `COP`) | `F1`, `F4` (plus `F2`, `F3`) | Joins reservation `currency` (`COP`, `MXN`, `BRL`, `EUR`, `USD`) with `F7` exchange rates to convert `total_amount` into `reporting_currency = "COP"`, then applies `net_amount_cop = amount_cop * (1.0 - commission_pct / 100.0)` using `catalog.channels`. | 
 | **`RN-03`** (Overbooking Limit) | `F1` (`HP-PT-001`, `HP-PT-002`) + `F3` | Computes rolling 90-day cancellation rate by `lead_time` bucket from `F1` (`is_canceled = 1`) and operational history to calculate `MIN(0.05 * rooms, (hist_cancel_rate * current_bookings) - 1)`, forcing `0` on high-category event dates (`CA-02`). | 
 | **`RN-05` & `RN-06`** (Dynamic Pricing) | `F1`, `F2`, `F3`, `F4`, `F6` | Evaluates country-specific season (`catalog.seasons[country]`: `LOW=0.85`, `MID=1.0`, `HIGH=1.25`) × `pickup` multiplier (`14d` window, `±15%` threshold → `1.10x` or `0.92x`) × `event_multiplier` (`1.15x`), clamped to `[0.75x, 1.60x]` of base rate (`CA-04`). | 
-| **`RN-08` & `CA-06`** (Cross-Channel Deduplication) | `F4` (`AG01..AG15`) vs. `F2` / `F3` | Matches normalized guest name + canonical `hotel_id` (`HP-XX-NNN`) + `check_in` within `±1 day`; retains the record with the lowest `commission_pct` (`Direct 0% < F4 Agency 10% < F2 OTA 18%`). | 
+| **`RN-08` & `CA-06`** (Cross-Channel Deduplication) | `F4` (`AG01..AG15`) vs. `F2` / `F3` | Matches `guest_ref` (or normalized guest name) + canonical `hotel_id` (`HP-XX-NNN`) + `check_in` within `±1 day`; retains the record with the lowest `commission_pct` (`Direct 0% < F4 Agency 10% < F2 OTA 18%`). | 
 | **`RN-11`, `RNF-06` & `CA-10`** (PII Pseudonymization) | `F4` (`guest_name`) | Hashes `guest_name` with SHA-256 + KMS salt (`guest_id_hash`) and drops clear-text guest names before writing Silver Parquet tables. | 
 
 ## 5. Repository Structure, Quality Controls, and Execution Runbook (`buenavista-csv`)
@@ -253,7 +235,7 @@ buenavista-csv/
 ├── schemas/
 │   ├── catalog.json                         # Shared platform reference catalog (v1.1.0 — 28 hotels, 5 currencies)
 │   ├── f1_schema.json                       # Canonical 32-column contract & HP-PT-001/002 mapping for F1
-│   └── f4_layouts_schema.json               # Dual-layout (Layout A & Layout B) & AG01..AG15 contract for F4
+│   └── f4_layouts_schema.json               # Layouts A/B (CSV) and C (Excel) & AG01..AG15 contract for F4
 ├── data/
 │   ├── f1_historical/
 │   │   └── hotel_bookings.csv               # Kaggle Hotel Booking Demand dataset (119,390 rows)
@@ -265,20 +247,22 @@ buenavista-csv/
 │       ├── catalog.py                       # Loader & season/currency/hotel helpers for catalog.json (v1.1.0)
 │       ├── defects.py                       # Unified DefectRates dataclass (US-14 / US-26)
 │       ├── f1_audit.py                      # F1 schema profiler, PT season mapper & IQR outlier auditor (US-11)
-│       ├── f4_generator.py                  # 15-agency (AG01..AG15) weekly CSV generator (US-25 / US-26)
+│       ├── f4_layouts.py                    # The three agency formats and the canonical reader
+│       ├── f4_generator.py                  # 15-agency (AG01..AG15) weekly CSV/Excel generator (US-25 / US-26)
+│       ├── f4_loader.py                     # Books each agency row in Neon via operation.reservar()
 │       └── validator.py                     # Non-destructive catalog-aware quality gate for F1 & F4 (US-6)
 ├── output/
 │   ├── f1_audit/
 │   │   ├── audit_report.csv                 # Machine-readable column & IQR audit metrics
 │   │   └── audit_summary.txt                # Executive text report of F1 anomalies & PT season profile
 │   ├── f4_agency_files/
-│   │   ├── *_week.csv                       # 15 generated weekly agency CSV files (HP-XX-NNN, 5 currencies)
+│   │   ├── 2026-W45/AGxx_2026-W45.csv|xlsx  # 15 weekly agency files (11 CSV + 4 Excel)
 │   │   └── _generation_summary.json         # Traceability log of injected F2 duplicates & missing currencies
 │   └── validation_reports/
 │       └── quality_validation_report.json   # Structured US-6 validation output
 ├── tests/
 │   ├── fixtures/
-│   │   └── malformed_f4_week.csv            # Known malformed test file for US-6 AC2 verification
+│   │   └── AG01_2026-W45.csv                # Known malformed test file for US-6 AC2 verification
 │   └── test_buenavista_csv.py               # Automated test suite (6/6 tests passing)
 └── docs/
     └── data-sources/                        # Modular Docusaurus pages ready to copy into doc-website/
@@ -301,7 +285,7 @@ uv sync --extra test
 uv run -m buenavista_csv.f1_audit
 
 # 3. Generate F4 Weekly Traditional Agency CSVs with Catalog v1.1.0 Codes (US-25 / US-26)
-uv run -m buenavista_csv.f4_generator   --seed 7   --bookings-per-agency 12   --duplicate-count 3   --missing-currency-rate 0.10
+uv run -m buenavista_csv.f4_generator --week 2026-W45 --seed 7 --bookings-per-agency 12 --duplicate-count 3 --missing-currency-rate 0.10
 
 # 4. Execute Non-Destructive Batch Quality Controls across F1 and F4 (US-6)
 uv run -m buenavista_csv.validator
@@ -313,11 +297,11 @@ uv run python -m unittest discover -s tests -v
 
 ### Non-Destructive Quality Gate Verification (`US-6 AC1 & AC2`)
 
-When `buenavista_csv.validator` runs against `tests/fixtures/malformed_f4_week.csv`, it validates every record against `schemas/catalog.json` (`v1.1.0`) and reports all 9 structural and catalog defects by exact file name, record ID, and field without modifying the input file:
+When `buenavista_csv.validator` runs against `tests/fixtures/AG01_2026-W45.csv`, it validates every record against `schemas/catalog.json` (`v1.1.0`) and reports all 9 structural and catalog defects by exact file name, record ID, and field without modifying the input file:
 
 ```
 {
-  "file": "malformed_f4_week.csv",
+  "file": "AG01_2026-W45.csv",
   "valid_schema": true,
   "layout": "A",
   "rows": 3,
@@ -325,63 +309,63 @@ When `buenavista_csv.validator` runs against `tests/fixtures/malformed_f4_week.c
   "defects": [
     {
       "type": "MISSING_REQUIRED_VALUE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "guest_name",
       "record": "AG01-00002",
       "detail": "Missing guest name"
     },
     {
       "type": "INVALID_HOTEL_ID",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "hotel_id",
       "record": "AG01-00002",
       "detail": "Hotel code 'hotel-999' not in catalog.json (expected HP-XX-NNN)"
     },
     {
       "type": "INVALID_ROOM_TYPE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "room_type",
       "record": "AG01-00002",
       "detail": "Invalid room_type 'PENTHOUSE'"
     },
     {
       "type": "INVALID_CURRENCY",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "currency",
       "record": "AG01-00002",
       "detail": "Unsupported currency 'GBP' (allowed: ['BRL', 'COP', 'EUR', 'MXN', 'USD'])"
     },
     {
       "type": "INVALID_DATE_RANGE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "check_in,check_out",
       "record": "AG01-00002",
       "detail": "check_out (2026-11-12) <= check_in (2026-11-15) (Section 5.3 Defect 2)"
     },
     {
       "type": "INVALID_TYPE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "total_amount",
       "record": "AG01-00002",
       "detail": "Non-numeric amount 'not_a_number'"
     },
     {
       "type": "INVALID_COMMISSION_RATE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "commission_rate",
       "record": "AG01-00002",
       "detail": "Commission rate out of [0,1]: 1.5"
     },
     {
       "type": "INTRA_FILE_DUPLICATE",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "agency_booking_id",
       "record": "AG01-00001",
       "detail": "Duplicate booking ID AG01-00001"
     },
     {
       "type": "MISSING_CURRENCY",
-      "file": "malformed_f4_week.csv",
+      "file": "AG01_2026-W45.csv",
       "field": "currency",
       "record": "AG01-00001",
       "detail": "Currency code is empty (Section 5.3 Defect 3)"
