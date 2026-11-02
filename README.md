@@ -72,6 +72,16 @@ NEON_DATABASE_URL=postgresql://app_writer:...@.../hospedaplus \
 uv run python -m unittest discover -s tests -v
 ```
 
+### Run every week with Docker
+
+```bash
+cp .env.example .env          # optional: NEON_READ_URL (etl_reader) and NEON_DATABASE_URL (app_writer)
+docker compose up -d --build
+docker compose logs -f f4-weekly
+```
+
+The `f4-weekly` service generates, validates and (if `NEON_DATABASE_URL` is set) books the current week as soon as it starts, then again every Monday 06:00 UTC (`F4_RUN_WEEKDAY`, `F4_RUN_HOUR_UTC`). Files are written to `./output/f4_agency_files/<YYYY-Www>/` on the host. Restarting is safe: an existing week is not regenerated and `reservar()` is idempotent. Uploading to S3 is left to the Airflow pipeline.
+
 ## 5. Key Outputs
 
 * **F1 Audit Report:** `output/f1_audit/audit_report.csv` and `output/f1_audit/audit_summary.txt`
