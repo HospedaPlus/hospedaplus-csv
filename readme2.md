@@ -36,3 +36,8 @@ f4-weekly-1  | [2026-11-02 16:45:36Z] 2026-W45: validation PASSED_WITH_CATALOGUE
 f4-weekly-1  | [2026-11-02 16:46:30Z] 2026-W45: Neon load {'confirmed': 183}
 f4-weekly-1  | [2026-11-02 16:46:30Z] next run 2026-11-09 06:00Z
 ```
+
+
+en ec2 ejecute asi:
+docker compose up -d --build f4-weekly
+docker compose logs --tail 20 f4-weekly
