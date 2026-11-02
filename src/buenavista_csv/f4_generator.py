@@ -387,13 +387,19 @@ def generate_agency_files(
     week: Optional[str] = None,
     seed: int = 7,
     bookings_per_agency: int = 12,
-    duplicate_count: int = 3,
+    duplicate_count: Optional[int] = None,
+    duplicate_rate: float = DEFAULT_DEFECT_RATES.duplicate_rate,
     missing_currency_rate: float = DEFAULT_DEFECT_RATES.missing_currency_rate,
     database_url: Optional[str] = None,
 ) -> dict:
     """Write one file per agency into <output_dir>/<week>/ and return the summary."""
     if not 0.0 <= missing_currency_rate <= 1.0:
         raise ValueError(f"missing_currency_rate must be between 0.0 and 1.0, got {missing_currency_rate}")
+
+    if not 0.0 <= duplicate_rate <= 1.0:
+        raise ValueError(f"duplicate_rate must be between 0.0 and 1.0, got {duplicate_rate}")
+    if duplicate_count is None:  # statement 5.3: configurable rate over the week's bookings
+        duplicate_count = round(duplicate_rate * bookings_per_agency * len(F4_AGENCIES))
 
     week = week or current_iso_week()
     monday = week_monday(week)
@@ -426,6 +432,7 @@ def generate_agency_files(
         "duplicates_created": [],
         "warning": warning,
         "missing_currency_rate_configured": missing_currency_rate,
+        "duplicate_rate_configured": duplicate_rate,
         "total_rows": 0,
         "rows_missing_currency": 0,
     }
@@ -444,9 +451,8 @@ def generate_agency_files(
             rows.append(_random_booking(rng, agency_code, next_id(), monday,
                                         commission_rate, missing_currency_rate))
 
-        # one duplicate per agency, spread over the first agencies
-        if agency_idx <= len(duplicate_sources):
-            src = duplicate_sources[agency_idx - 1]
+        # duplicates spread round-robin over the agencies
+        for src in duplicate_sources[agency_idx - 1::len(F4_AGENCIES)]:
             dup = _duplicate_booking(rng, src, agency_code, next_id(), commission_rate)
             rows.insert(rng.randint(0, len(rows)), dup)
             summary["duplicates_created"].append({
@@ -489,7 +495,12 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--seed", type=int, default=int(os.getenv("F4_SEED", "7")))
     parser.add_argument("--bookings-per-agency", type=int, default=int(os.getenv("F4_BOOKINGS_PER_AGENCY", "12")))
-    parser.add_argument("--duplicate-count", type=int, default=int(os.getenv("F4_DUPLICATE_COUNT", "3")))
+    parser.add_argument("--duplicate-rate", type=float,
+                        default=float(os.getenv("F4_DUPLICATE_RATE", DEFAULT_DEFECT_RATES.duplicate_rate)),
+                        help="share of the week's bookings that duplicate an F2 booking (default 0.10)")
+    parser.add_argument("--duplicate-count", type=int,
+                        default=int(os.environ["F4_DUPLICATE_COUNT"]) if os.getenv("F4_DUPLICATE_COUNT") else None,
+                        help="fixed number of duplicates instead of --duplicate-rate")
     parser.add_argument("--missing-currency-rate", type=float,
                         default=float(os.getenv("F4_MISSING_CURRENCY_RATE", DEFAULT_DEFECT_RATES.missing_currency_rate)))
     parser.add_argument("--database-url", default=os.getenv("NEON_READ_URL"),
@@ -504,6 +515,7 @@ def main() -> None:
         seed=args.seed,
         bookings_per_agency=args.bookings_per_agency,
         duplicate_count=args.duplicate_count,
+        duplicate_rate=args.duplicate_rate,
         missing_currency_rate=args.missing_currency_rate,
         database_url=args.database_url,
     )
