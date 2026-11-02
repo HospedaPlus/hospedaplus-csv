@@ -1,0 +1,144 @@
+{
+  "catalog_version": "1.1.0",
+  "week": "2026-W45",
+  "week_start": "2026-11-02",
+  "seed": 7,
+  "duplicate_reference_source": "/home/claude/hospedaplus-csv/data/f2_reference/events.jsonl",
+  "agencies": {
+    "AG01": {
+      "name": "ViajaFacil",
+      "file": "AG01_2026-W45.csv",
+      "rows": 13,
+      "layout": "B"
+    },
+    "AG02": {
+      "name": "SolyMar Tours",
+      "file": "AG02_2026-W45.csv",
+      "rows": 13,
+      "layout": "A"
+    },
+    "AG03": {
+      "name": "EuroTrip Agency",
+      "file": "AG03_2026-W45.xlsx",
+      "rows": 13,
+      "layout": "C"
+    },
+    "AG04": {
+      "name": "Andes Travel",
+      "file": "AG04_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG05": {
+      "name": "GlobalStay Agency",
+      "file": "AG05_2026-W45.csv",
+      "rows": 12,
+      "layout": "B"
+    },
+    "AG06": {
+      "name": "CaribeViajes",
+      "file": "AG06_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG07": {
+      "name": "MontanaTours",
+      "file": "AG07_2026-W45.xlsx",
+      "rows": 12,
+      "layout": "C"
+    },
+    "AG08": {
+      "name": "CostaBella Travel",
+      "file": "AG08_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG09": {
+      "name": "NorteSur Agencia",
+      "file": "AG09_2026-W45.csv",
+      "rows": 12,
+      "layout": "B"
+    },
+    "AG10": {
+      "name": "Horizonte Viajes",
+      "file": "AG10_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG11": {
+      "name": "Rutas del Sur",
+      "file": "AG11_2026-W45.xlsx",
+      "rows": 12,
+      "layout": "C"
+    },
+    "AG12": {
+      "name": "BlueSky Agency",
+      "file": "AG12_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG13": {
+      "name": "Destino Feliz",
+      "file": "AG13_2026-W45.csv",
+      "rows": 12,
+      "layout": "B"
+    },
+    "AG14": {
+      "name": "Puerta del Sol Travel",
+      "file": "AG14_2026-W45.csv",
+      "rows": 12,
+      "layout": "A"
+    },
+    "AG15": {
+      "name": "Viajes Amanecer",
+      "file": "AG15_2026-W45.xlsx",
+      "rows": 12,
+      "layout": "C"
+    }
+  },
+  "duplicates_created": [
+    {
+      "agency_code": "AG01",
+      "agency_booking_id": "AG01-2026W45-0013",
+      "original_reservation_id": "res-10018",
+      "original_channel": "booking_channel_b",
+      "guest_ref": "G-0034145",
+      "real_guest_name": "Diego Lopez",
+      "agency_guest_name": "Diego lopez",
+      "hotel_id": "HP-CO-006",
+      "agency_check_in": "2026-12-04",
+      "original_check_in": "2026-12-04",
+      "check_out": "2026-12-11"
+    },
+    {
+      "agency_code": "AG02",
+      "agency_booking_id": "AG02-2026W45-0013",
+      "original_reservation_id": "res-10005",
+      "original_channel": "booking_channel_a",
+      "guest_ref": "G-0023168",
+      "real_guest_name": "Diego Smith",
+      "agency_guest_name": "Diego Simth",
+      "hotel_id": "HP-BR-006",
+      "agency_check_in": "2027-01-26",
+      "original_check_in": "2027-01-27",
+      "check_out": "2027-01-28"
+    },
+    {
+      "agency_code": "AG03",
+      "agency_booking_id": "AG03-2026W45-0013",
+      "original_reservation_id": "res-10027",
+      "original_channel": "booking_channel_a",
+      "guest_ref": "G-0032221",
+      "real_guest_name": "Camila Ferreira",
+      "agency_guest_name": "Camila ferreira",
+      "hotel_id": "HP-MX-001",
+      "agency_check_in": "2026-11-23",
+      "original_check_in": "2026-11-24",
+      "check_out": "2026-12-01"
+    }
+  ],
+  "warning": null,
+  "missing_currency_rate_configured": 0.1,
+  "total_rows": 183,
+  "rows_missing_currency": 21
+}

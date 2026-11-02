@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "openpyxl>=3.1.5",
     "pandas>=2.0.0",
 ]
 
@@ -15,11 +16,15 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
 ]
+neon = [
+    "psycopg[binary]>=3.2",
+]
 
 [project.scripts]
 audit-f1 = "buenavista_csv.f1_audit:main"
 generate-f4 = "buenavista_csv.f4_generator:main"
 validate-csv-sources = "buenavista_csv.validator:main"
+load-f4 = "buenavista_csv.f4_loader:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

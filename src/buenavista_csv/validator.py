@@ -13,7 +13,6 @@ Aligned with shared catalog.json (v1.1.0):
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 from datetime import datetime
@@ -28,11 +27,15 @@ from buenavista_csv.catalog import (
     F4_AGENCIES,
     HOTELS_BY_CODE,
 )
-from buenavista_csv.f4_generator import (
-    LAYOUT_A_COLUMNS,
-    LAYOUT_B_COLUMNS,
-    _derive_guest_name,
-    _load_f2_reservations,
+from buenavista_csv.catalog import ROOM_TYPES
+from buenavista_csv.f4_generator import ReferenceBooking, reference_from_events
+from buenavista_csv.f4_layouts import (
+    WEEK_RE,
+    detect_layout,
+    list_agency_files,
+    parse_file_name,
+    read_raw,
+    to_canonical,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +56,8 @@ EXPECTED_F1_COLUMNS = [
 ]
 
 ALLOWED_ROOM_TYPES_SET = set(ALLOWED_ROOM_TYPES)
+VALID_AGENCY_CODES = {a["code"] for a in F4_AGENCIES}
+GUEST_REF_RE = re.compile(r"^G-\d{7}$")
 
 
 def validate_f1_file(csv_path: Path) -> dict[str, Any]:
@@ -190,239 +195,191 @@ def _is_fuzzy_name_match(name_a: str, name_b: str) -> bool:
     return False
 
 
-def validate_f4_file(csv_path: Path, f2_reference: list[dict] | None = None) -> dict[str, Any]:
-    """Validate a single F4 weekly agency CSV file against catalog v1.1.0 non-destructively."""
+def _defect(dtype: str, file: str, field: str | None, record: str | None, detail: str) -> dict[str, Any]:
+    return {"type": dtype, "file": file, "field": field, "record": record, "detail": detail}
+
+
+def validate_f4_file(path: Path, reference: list[ReferenceBooking] | None = None) -> dict[str, Any]:
+    """Validate one weekly agency file (CSV or XLSX, layout A/B/C) non-destructively."""
+    name = path.name
+    if not path.exists():
+        return {"file": str(path), "valid_schema": False, "layout": None, "rows": 0,
+                "defects": [_defect("FILE_NOT_FOUND", name, None, None, "File does not exist")]}
+
+    raw = read_raw(path)
+    if not raw:
+        return {"file": name, "valid_schema": False, "layout": None, "rows": 0,
+                "defects": [_defect("EMPTY_FILE", name, "header", "row_1", "File is empty")]}
+
     defects: list[dict[str, Any]] = []
-    if not csv_path.exists():
-        return {
-            "file": str(csv_path),
-            "valid_schema": False,
-            "layout": None,
-            "rows": 0,
-            "defects": [{"type": "FILE_NOT_FOUND", "file": csv_path.name, "field": None, "record": None, "detail": "File does not exist"}],
-        }
+    parsed = parse_file_name(path)
+    agency_code = parsed[0] if parsed else None
+    if parsed is None or agency_code not in VALID_AGENCY_CODES:
+        defects.append(_defect("INVALID_FILE_NAME", name, "file_name", None,
+                               "Expected <AG01..AG15>_<YYYY-Www>.csv|xlsx"))
 
-    with csv_path.open("r", encoding="utf-8", newline="") as f:
-        reader = list(csv.reader(f))
-
-    if not reader:
-        return {
-            "file": csv_path.name,
-            "valid_schema": False,
-            "layout": None,
-            "rows": 0,
-            "defects": [{"type": "EMPTY_FILE", "file": csv_path.name, "field": "header", "record": "row_1", "detail": "CSV file is empty"}],
-        }
-
-    header = reader[0]
-    if header == LAYOUT_A_COLUMNS:
-        layout = "A"
-    elif header == LAYOUT_B_COLUMNS:
-        layout = "B"
-    else:
-        defects.append({
-            "type": "SCHEMA_MISMATCH",
-            "file": csv_path.name,
-            "field": "header",
-            "record": "row_1",
-            "detail": f"Header {header} does not match Layout A or Layout B contract.",
-        })
-        return {
-            "file": csv_path.name,
-            "valid_schema": False,
-            "layout": None,
-            "rows": len(reader) - 1,
-            "defects": defects,
-        }
+    layout = detect_layout(raw[0])
+    if layout is None:
+        defects.append(_defect("SCHEMA_MISMATCH", name, "header", "row_1",
+                               f"Header {raw[0]} does not match layout A, B or C."))
+        return {"file": name, "valid_schema": False, "layout": None, "rows": len(raw) - 1, "defects": defects}
 
     seen_booking_ids: set[str] = set()
-    data_rows = reader[1:]
+    data_rows = raw[1:]
+    n_cols = len(layout.columns)
 
     for idx, raw_row in enumerate(data_rows, start=2):
-        if len(raw_row) != 9:
-            defects.append({
-                "type": "COLUMN_COUNT_MISMATCH",
-                "file": csv_path.name,
-                "field": "row",
-                "record": f"row_{idx}",
-                "detail": f"Expected 9 columns, found {len(raw_row)}",
-            })
+        if len(raw_row) != n_cols:
+            defects.append(_defect("COLUMN_COUNT_MISMATCH", name, "row", f"row_{idx}",
+                                   f"Expected {n_cols} columns, found {len(raw_row)}"))
             continue
-
-        if layout == "A":
-            booking_id, guest_name, hotel_id, check_in, check_out, room_type, currency, amount_str, comm_str = raw_row
-        else:
-            booking_id, hotel_id, guest_name, check_in, check_out, room_type, amount_str, currency, comm_str = raw_row
-
+        row = to_canonical(layout, raw_row)
+        booking_id = row["agency_booking_id"]
         rec_id = booking_id or f"row_{idx}"
 
-        if not booking_id.strip():
-            defects.append({"type": "MISSING_REQUIRED_VALUE", "file": csv_path.name, "field": "agency_booking_id", "record": rec_id, "detail": "Missing booking ID"})
+        if not booking_id:
+            defects.append(_defect("MISSING_REQUIRED_VALUE", name, "agency_booking_id", rec_id, "Missing booking ID"))
         elif booking_id in seen_booking_ids:
-            defects.append({"type": "INTRA_FILE_DUPLICATE", "file": csv_path.name, "field": "agency_booking_id", "record": rec_id, "detail": f"Duplicate booking ID {booking_id}"})
+            defects.append(_defect("INTRA_FILE_DUPLICATE", name, "agency_booking_id", rec_id, f"Duplicate booking ID {booking_id}"))
+        elif agency_code and not booking_id.startswith(agency_code):
+            defects.append(_defect("BOOKING_ID_AGENCY_MISMATCH", name, "agency_booking_id", rec_id,
+                                   f"Booking ID does not start with {agency_code}"))
         seen_booking_ids.add(booking_id)
 
-        if not guest_name.strip():
-            defects.append({"type": "MISSING_REQUIRED_VALUE", "file": csv_path.name, "field": "guest_name", "record": rec_id, "detail": "Missing guest name"})
+        if not GUEST_REF_RE.match(row["guest_ref"]):
+            defects.append(_defect("INVALID_GUEST_REF", name, "guest_ref", rec_id,
+                                   f"guest_ref '{row['guest_ref']}' is not G-0000000 (needed by operation.reservar())"))
+        if not row["guest_name"]:
+            defects.append(_defect("MISSING_REQUIRED_VALUE", name, "guest_name", rec_id, "Missing guest name"))
+        if row["hotel_id"] not in HOTELS_BY_CODE:
+            defects.append(_defect("INVALID_HOTEL_ID", name, "hotel_id", rec_id,
+                                   f"Hotel code '{row['hotel_id']}' not in catalog.json (expected HP-XX-NNN)"))
+        if row["room_type"] not in ALLOWED_ROOM_TYPES_SET:
+            defects.append(_defect("INVALID_ROOM_TYPE", name, "room_type", rec_id, f"Invalid room_type '{row['room_type']}'"))
+        if row["refundable"] not in ("true", "false"):
+            defects.append(_defect("INVALID_RATE_TYPE", name, "refundable", rec_id, f"Unknown rate type '{row['refundable']}'"))
 
-        if hotel_id.strip() not in HOTELS_BY_CODE:
-            defects.append({"type": "INVALID_HOTEL_ID", "file": csv_path.name, "field": "hotel_id", "record": rec_id, "detail": f"Hotel code '{hotel_id}' not in catalog.json (expected HP-XX-NNN)"})
+        # Defect 3: missing currency or currency not in catalog.json
+        if not row["currency"]:
+            defects.append(_defect("MISSING_CURRENCY", name, "currency", rec_id,
+                                   "Currency code is empty (Section 5.3 Defect 3)"))
+        elif row["currency"] not in ALLOWED_CURRENCIES:
+            defects.append(_defect("INVALID_CURRENCY", name, "currency", rec_id,
+                                   f"Unsupported currency '{row['currency']}' (allowed: {sorted(ALLOWED_CURRENCIES)})"))
 
-        if room_type.strip() not in ALLOWED_ROOM_TYPES_SET:
-            defects.append({"type": "INVALID_ROOM_TYPE", "file": csv_path.name, "field": "room_type", "record": rec_id, "detail": f"Invalid room_type '{room_type}'"})
-
-        # Defect 3: Missing currency or currency not in catalog.json
-        if not currency.strip():
-            defects.append({
-                "type": "MISSING_CURRENCY",
-                "file": csv_path.name,
-                "field": "currency",
-                "record": rec_id,
-                "detail": "Currency code is empty (Section 5.3 Defect 3)",
-            })
-        elif currency.strip() not in ALLOWED_CURRENCIES:
-            defects.append({
-                "type": "INVALID_CURRENCY",
-                "file": csv_path.name,
-                "field": "currency",
-                "record": rec_id,
-                "detail": f"Unsupported currency '{currency}' (allowed: {sorted(ALLOWED_CURRENCIES)})",
-            })
-
+        ci_dt = None
         try:
-            ci_dt = datetime.strptime(check_in.strip(), "%Y-%m-%d")
-            co_dt = datetime.strptime(check_out.strip(), "%Y-%m-%d")
+            ci_dt = datetime.strptime(row["check_in"], "%Y-%m-%d")
+            co_dt = datetime.strptime(row["check_out"], "%Y-%m-%d")
             if co_dt <= ci_dt:
-                defects.append({
-                    "type": "INVALID_DATE_RANGE",
-                    "file": csv_path.name,
-                    "field": "check_in,check_out",
-                    "record": rec_id,
-                    "detail": f"check_out ({check_out}) <= check_in ({check_in}) (Section 5.3 Defect 2)",
-                })
+                defects.append(_defect("INVALID_DATE_RANGE", name, "check_in,check_out", rec_id,
+                                       f"check_out ({row['check_out']}) <= check_in ({row['check_in']}) (Section 5.3 Defect 2)"))
         except ValueError:
-            ci_dt = None
-            defects.append({
-                "type": "INVALID_TYPE",
-                "file": csv_path.name,
-                "field": "check_in,check_out",
-                "record": rec_id,
-                "detail": f"Unparseable dates: check_in='{check_in}', check_out='{check_out}'",
-            })
+            defects.append(_defect("INVALID_TYPE", name, "check_in,check_out", rec_id,
+                                   f"Unparseable dates: check_in='{row['check_in']}', check_out='{row['check_out']}'"))
+
+        ints = {}
+        for field in ("rooms", "adults", "children"):
+            try:
+                ints[field] = int(float(row[field]))
+            except ValueError:
+                defects.append(_defect("INVALID_TYPE", name, field, rec_id, f"Non-numeric {field} '{row[field]}'"))
+        if len(ints) == 3 and row["room_type"] in ROOM_TYPES:
+            if ints["rooms"] < 1 or ints["adults"] < 1 or ints["children"] < 0:
+                defects.append(_defect("INVALID_OCCUPANCY", name, "rooms,adults,children", rec_id,
+                                       f"rooms={ints['rooms']} adults={ints['adults']} children={ints['children']}"))
+            elif ints["adults"] + ints["children"] > ROOM_TYPES[row["room_type"]]["max_guests"] * ints["rooms"]:
+                defects.append(_defect("INVALID_OCCUPANCY", name, "adults,children", rec_id,
+                                       f"{ints['adults'] + ints['children']} guests do not fit in {ints['rooms']} {row['room_type']}"))
 
         try:
-            amt = float(amount_str)
+            amt = float(row["total_amount"])
             if amt <= 0:
-                defects.append({
-                    "type": "NON_POSITIVE_AMOUNT",
-                    "file": csv_path.name,
-                    "field": "total_amount",
-                    "record": rec_id,
-                    "detail": f"Amount must be > 0, got {amt}",
-                })
+                defects.append(_defect("NON_POSITIVE_AMOUNT", name, "total_amount", rec_id, f"Amount must be > 0, got {amt}"))
         except ValueError:
-            defects.append({
-                "type": "INVALID_TYPE",
-                "file": csv_path.name,
-                "field": "total_amount",
-                "record": rec_id,
-                "detail": f"Non-numeric amount '{amount_str}'",
-            })
+            defects.append(_defect("INVALID_TYPE", name, "total_amount", rec_id, f"Non-numeric amount '{row['total_amount']}'"))
 
         try:
-            comm = float(comm_str)
+            comm = float(row["commission_rate"])
             if not 0.0 <= comm <= 1.0:
-                defects.append({
-                    "type": "INVALID_COMMISSION_RATE",
-                    "file": csv_path.name,
-                    "field": "commission_rate",
-                    "record": rec_id,
-                    "detail": f"Commission rate out of [0,1]: {comm}",
-                })
+                defects.append(_defect("INVALID_COMMISSION_RATE", name, "commission_rate", rec_id,
+                                       f"Commission rate out of [0,1]: {comm}"))
         except ValueError:
-            defects.append({
-                "type": "INVALID_TYPE",
-                "file": csv_path.name,
-                "field": "commission_rate",
-                "record": rec_id,
-                "detail": f"Non-numeric commission '{comm_str}'",
-            })
+            defects.append(_defect("INVALID_TYPE", name, "commission_rate", rec_id,
+                                   f"Non-numeric commission '{row['commission_rate']}'"))
 
-        if f2_reference and ci_dt is not None:
-            for ev in f2_reference:
-                if ev.get("hotel_id") != hotel_id.strip():
+        # Defect 4 / RN-08: same guest_ref (or a near-identical name) + hotel + check-in ±1 day
+        if reference and ci_dt is not None:
+            for ref in reference:
+                if ref.hotel_id != row["hotel_id"]:
                     continue
-                ev_data = ev.get("data", {})
-                try:
-                    ev_ci = datetime.strptime(ev_data.get("check_in", ""), "%Y-%m-%d")
-                except ValueError:
+                ref_ci = datetime.strptime(ref.check_in, "%Y-%m-%d")
+                if abs((ci_dt - ref_ci).days) > 1:
                     continue
-                if abs((ci_dt - ev_ci).days) <= 1 and ev_data.get("check_out") == check_out.strip():
-                    f2_guest = _derive_guest_name(ev["reservation_id"])
-                    if _is_fuzzy_name_match(guest_name, f2_guest):
-                        defects.append({
-                            "type": "CROSS_CHANNEL_DUPLICATE",
-                            "file": csv_path.name,
-                            "field": "guest_name,hotel_id,check_in",
-                            "record": rec_id,
-                            "detail": (
-                                f"Cross-channel duplicate of F2 {ev['reservation_id']} "
-                                f"({ev_data.get('channel')}): agency guest '{guest_name}' vs "
-                                f"F2 guest '{f2_guest}', check_in {check_in} vs {ev_data.get('check_in')} (RN-08)"
-                            ),
-                        })
+                if ref.guest_ref == row["guest_ref"] or _is_fuzzy_name_match(row["guest_name"], ref.guest_name):
+                    defects.append(_defect(
+                        "CROSS_CHANNEL_DUPLICATE", name, "guest_ref,hotel_id,check_in", rec_id,
+                        f"Cross-channel duplicate of F2 {ref.reservation_id} ({ref.channel}): guest {row['guest_ref']} "
+                        f"'{row['guest_name']}' vs '{ref.guest_name}', check_in {row['check_in']} vs {ref.check_in} (RN-08)",
+                    ))
+                    break
 
     return {
-        "file": csv_path.name,
+        "file": name,
         "valid_schema": True,
-        "layout": layout,
+        "layout": layout.name,
         "rows": len(data_rows),
         "defect_count": len(defects),
         "defects": defects,
     }
 
 
-def validate_f4_directory(agency_dir: Path, f2_events_path: Path = DEFAULT_F2_PATH) -> dict[str, Any]:
-    """Validate all weekly agency CSV files in a directory."""
-    csv_files = sorted(p for p in agency_dir.glob("*_week.csv") if p.is_file())
-    f2_ref = _load_f2_reservations(f2_events_path) if f2_events_path else []
+def latest_week_dir(base: Path) -> Path:
+    """output/f4_agency_files -> its newest <YYYY-Www> subfolder (or base itself if it has none)."""
+    weeks = sorted(p for p in base.iterdir() if p.is_dir() and WEEK_RE.match(p.name)) if base.exists() else []
+    return weeks[-1] if weeks else base
+
+
+def validate_f4_directory(agency_dir: Path, f2_events_path: Path | None = DEFAULT_F2_PATH,
+                          reference: list[ReferenceBooking] | None = None) -> dict[str, Any]:
+    """Validate all agency files of one week (CSV and XLSX)."""
+    files = list_agency_files(agency_dir) if agency_dir.exists() else []
+    if reference is None:
+        reference = reference_from_events(f2_events_path) if f2_events_path else []
 
     file_reports = []
     all_defects = []
     total_rows = 0
-    layout_counts = {"A": 0, "B": 0, "INVALID": 0}
+    layout_counts = {"A": 0, "B": 0, "C": 0, "INVALID": 0}
     expected_count = len(F4_AGENCIES)
 
-    for fpath in csv_files:
-        rep = validate_f4_file(fpath, f2_reference=f2_ref)
+    for fpath in files:
+        rep = validate_f4_file(fpath, reference=reference)
         file_reports.append(rep)
         total_rows += rep["rows"]
-        if rep["layout"] in ("A", "B"):
-            layout_counts[rep["layout"]] += 1
-        else:
-            layout_counts["INVALID"] += 1
+        layout_counts[rep["layout"] or "INVALID"] += 1
         all_defects.extend(rep["defects"])
 
     defect_counts_by_type: dict[str, int] = {}
     for d in all_defects:
-        dtype = d["type"]
-        defect_counts_by_type[dtype] = defect_counts_by_type.get(dtype, 0) + 1
+        defect_counts_by_type[d["type"]] = defect_counts_by_type.get(d["type"], 0) + 1
 
     structural_errors = sum(
         defect_counts_by_type.get(k, 0)
         for k in (
-            "SCHEMA_MISMATCH", "COLUMN_COUNT_MISMATCH", "INVALID_TYPE",
-            "MISSING_REQUIRED_VALUE", "INVALID_DATE_RANGE", "INVALID_HOTEL_ID",
-            "INVALID_ROOM_TYPE", "INVALID_CURRENCY", "INVALID_COMMISSION_RATE",
+            "SCHEMA_MISMATCH", "COLUMN_COUNT_MISMATCH", "INVALID_TYPE", "INVALID_FILE_NAME",
+            "MISSING_REQUIRED_VALUE", "INVALID_DATE_RANGE", "INVALID_HOTEL_ID", "INVALID_GUEST_REF",
+            "INVALID_ROOM_TYPE", "INVALID_CURRENCY", "INVALID_COMMISSION_RATE", "INVALID_RATE_TYPE",
+            "INVALID_OCCUPANCY", "BOOKING_ID_AGENCY_MISMATCH",
         )
     )
-    status = "PASSED_WITH_CATALOGUED_DEFECTS" if structural_errors == 0 and len(csv_files) == expected_count else "FAILED_VALIDATION"
+    status = "PASSED_WITH_CATALOGUED_DEFECTS" if structural_errors == 0 and len(files) == expected_count else "FAILED_VALIDATION"
 
     return {
         "source": "F4",
         "catalog_version": CATALOG_VERSION,
         "directory": str(agency_dir),
-        "agency_files_found": len(csv_files),
+        "agency_files_found": len(files),
         "expected_agency_files": expected_count,
         "total_rows": total_rows,
         "layout_distribution": layout_counts,
@@ -443,7 +400,7 @@ def main() -> None:
 
     args.report_dir.mkdir(parents=True, exist_ok=True)
     f1_res = validate_f1_file(args.f1_path)
-    f4_res = validate_f4_directory(args.f4_dir, args.f2_events)
+    f4_res = validate_f4_directory(latest_week_dir(args.f4_dir), args.f2_events)
 
     combined = {"catalog_version": CATALOG_VERSION, "f1_validation": f1_res, "f4_validation": f4_res}
     out_file = args.report_dir / "quality_validation_report.json"
