@@ -1,0 +1,15 @@
+# F4 weekly agency files.
+#   cp .env.example .env   # fill NEON_READ_URL / NEON_DATABASE_URL (optional)
+#   docker compose up -d --build
+#   docker compose logs -f f4-weekly
+# Files land in ./output/f4_agency_files/<YYYY-Www>/ on this machine.
+services:
+  f4-weekly:
+    build: .
+    command: ["python", "-m", "buenavista_csv.weekly"]
+    env_file: .env
+    environment:
+      F4_OUTPUT_DIR: /app/output/f4_agency_files
+    volumes:
+      - ./output:/app/output
+    restart: unless-stopped
