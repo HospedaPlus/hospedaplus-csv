@@ -58,7 +58,7 @@ uv run -m buenavista_csv.f1_audit
 
 # 2. Generate one week of F4 files: 15 agencies, 11 CSV + 4 Excel (US-25 / US-26)
 #    Add --database-url $NEON_READ_URL (etl_reader) to copy real F2 bookings from Neon as duplicates
-uv run -m buenavista_csv.f4_generator --week 2026-W45 --seed 7 --bookings-per-agency 12 --duplicate-count 3 --missing-currency-rate 0.10
+uv run -m buenavista_csv.f4_generator --week 2026-W45 --seed 7 --bookings-per-agency 12 --duplicate-rate 0.10 --missing-currency-rate 0.10
 
 # 3. Run non-destructive quality checks on F1 and the latest F4 week (US-6)
 uv run -m buenavista_csv.validator

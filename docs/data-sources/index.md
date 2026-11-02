@@ -190,7 +190,7 @@ The agency code comes from the file name, so it is never trusted from the conten
 ### Deliberate Data-Quality Defects (Section 5.3, US-14, US-26)
 
 1. **Defect 3 — missing currency** (`--missing-currency-rate`, default `0.10`). The amount stays in the hotel currency, so the fix (use `catalog.hotels[hotel_id].currency` and flag `currency_inferred = true`) is correct, both in the loader and in Silver.
-2. **Defect 4 — cross-channel duplicates** (`--duplicate-count`, RN-08). A real F2 booking is copied with the **same `guest_ref`**, hotel and room type, a slightly changed name (`swap_order`, `middle_initial`, `typo`, `drop_accent_like`) and check-in ±1 day. With `--database-url` (or `NEON_READ_URL`, role `etl_reader`) the F2 bookings are read from `operation.reservations` in Neon; without it, from `data/f2_reference/events.jsonl` (offline and tests). The lineage is in `_generation_summary.json`.
+2. **Defect 4 — cross-channel duplicates** (`--duplicate-rate`, default 0.10 of the week's bookings; `--duplicate-count` forces a fixed number, RN-08). A real F2 booking is copied with the **same `guest_ref`**, hotel and room type, a slightly changed name (`swap_order`, `middle_initial`, `typo`, `drop_accent_like`) and check-in ±1 day. With `--database-url` (or `NEON_READ_URL`, role `etl_reader`) the F2 bookings are read from `operation.reservations` in Neon; without it, from `data/f2_reference/events.jsonl` (offline and tests). The lineage is in `_generation_summary.json`.
 
 ### Loading into Neon (single write path for inventory)
 
@@ -285,7 +285,7 @@ uv sync --extra test
 uv run -m buenavista_csv.f1_audit
 
 # 3. Generate F4 Weekly Traditional Agency CSVs with Catalog v1.1.0 Codes (US-25 / US-26)
-uv run -m buenavista_csv.f4_generator --week 2026-W45 --seed 7 --bookings-per-agency 12 --duplicate-count 3 --missing-currency-rate 0.10
+uv run -m buenavista_csv.f4_generator --week 2026-W45 --seed 7 --bookings-per-agency 12 --duplicate-rate 0.10 --missing-currency-rate 0.10
 
 # 4. Execute Non-Destructive Batch Quality Controls across F1 and F4 (US-6)
 uv run -m buenavista_csv.validator

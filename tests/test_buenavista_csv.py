@@ -81,6 +81,21 @@ class TestBuenavistaCSV(unittest.TestCase):
             self.assertEqual(adr["upper_bound"], 211.06)
             self.assertEqual(adr["outlier_count"], 3793)
 
+    def test_f4_duplicates_follow_configurable_rate(self) -> None:
+        """Statement 5.3: cross-channel duplicates are a configurable rate of the week's bookings."""
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = generate_agency_files(
+                output_dir=Path(tmp), f2_events_path=F2_EVENTS, week=WEEK, seed=7,
+                bookings_per_agency=12, duplicate_rate=0.10, missing_currency_rate=0.0,
+            )
+            self.assertEqual(len(summary["duplicates_created"]), round(0.10 * 15 * 12))
+            self.assertEqual(summary["total_rows"], 15 * 12 + 18)
+            none = generate_agency_files(
+                output_dir=Path(tmp) / "zero", f2_events_path=F2_EVENTS, week=WEEK, seed=7,
+                bookings_per_agency=12, duplicate_rate=0.0, missing_currency_rate=0.0,
+            )
+            self.assertEqual(none["duplicates_created"], [])
+
     def test_f4_generator_weekly_files_per_agency(self) -> None:
         """US-25 AC2, US-26 & US-5: 15 agencies, one file per agency and week, CSV and Excel."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,7 +120,8 @@ class TestBuenavistaCSV(unittest.TestCase):
 
             # same seed and week -> identical files (re-running a week is safe)
             again = Path(tmp) / "again"
-            generate_agency_files(output_dir=again, f2_events_path=F2_EVENTS, week=WEEK, seed=7)
+            generate_agency_files(output_dir=again, f2_events_path=F2_EVENTS, week=WEEK, seed=7,
+                                  bookings_per_agency=12, duplicate_count=3, missing_currency_rate=0.10)
             for name in files:
                 self.assertEqual(_sha256(week_dir / name), _sha256(again / WEEK / name), name)
 
@@ -115,7 +131,7 @@ class TestBuenavistaCSV(unittest.TestCase):
             generate_agency_files(output_dir=Path(tmp), f2_events_path=F2_EVENTS, week=WEEK, seed=7)
             bookings, problems = read_week(Path(tmp) / WEEK)
             self.assertEqual(problems, [])
-            self.assertEqual(len(bookings), 15 * 12 + 3)
+            self.assertEqual(len(bookings), 15 * 12 + 18)  # default duplicate rate 0.10
             for b in bookings:
                 self.assertRegex(b["channel"], r"^AG\d{2}$")
                 self.assertTrue(b["external_code"].startswith(b["channel"] + "-2026W45-"))
