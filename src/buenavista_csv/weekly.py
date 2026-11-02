@@ -41,7 +41,8 @@ def run_week(week: str, output_dir: Path) -> None:
             week=week,
             seed=int(os.getenv("F4_SEED", "7")),
             bookings_per_agency=int(os.getenv("F4_BOOKINGS_PER_AGENCY", "12")),
-            duplicate_count=int(os.getenv("F4_DUPLICATE_COUNT", "3")),
+            duplicate_count=int(os.environ["F4_DUPLICATE_COUNT"]) if os.getenv("F4_DUPLICATE_COUNT") else None,
+            duplicate_rate=float(os.getenv("F4_DUPLICATE_RATE", "0.10")),
             missing_currency_rate=float(os.getenv("F4_MISSING_CURRENCY_RATE", "0.10")),
             database_url=os.getenv("NEON_READ_URL") or None,
         )
