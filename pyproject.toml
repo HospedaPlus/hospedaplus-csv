@@ -19,6 +19,9 @@ test = [
 neon = [
     "psycopg[binary]>=3.2",
 ]
+s3 = [
+    "boto3>=1.34",
+]
 
 [project.scripts]
 audit-f1 = "buenavista_csv.f1_audit:main"

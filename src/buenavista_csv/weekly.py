@@ -5,6 +5,7 @@ Every week (default: Monday 06:00 UTC) it does, for the current ISO week:
   1. generate the 15 agency files      (f4_generator)
   2. validate them                     (validator; stops if there are structural errors)
   3. book them in Neon via reservar()  (f4_loader; only if NEON_DATABASE_URL is set)
+  4. copy the raw files to S3 bronze   (only if F4_S3_BUCKET is set)
 
 On start it also runs the current week if that week was not generated yet, so the first
 `docker compose up -d` already produces files. A week that already has its files is not
@@ -12,7 +13,9 @@ generated again (same seed + week = same files, so nothing would change anyway),
 loader is idempotent, so restarts are safe.
 
 Env: F4_RUN_WEEKDAY (0=Mon), F4_RUN_HOUR_UTC (6), plus the generator/loader variables.
-Upload to S3 is not done here: that is the pipeline's job (Airflow) once it exists.
+The files are only generated on this machine, so step 4 hands them to the lakehouse:
+s3://<F4_S3_BUCKET>/bronze/f4_agencias/semana=<YYYY-Www>/<file>. The pipeline's bronze DAG
+checks that the week landed. Credentials come from the EC2 role (or AWS_* env vars).
 """
 
 from __future__ import annotations
@@ -60,6 +63,24 @@ def run_week(week: str, output_dir: Path) -> None:
         log(f"{week}: Neon load {r['counts']}")
     else:
         log(f"{week}: NEON_DATABASE_URL not set, skipping the Neon load")
+
+    bucket = os.getenv("F4_S3_BUCKET")
+    if bucket:
+        log(f"{week}: {upload_week(week_dir, bucket)} files copied to s3://{bucket}/bronze/f4_agencias/semana={week}/")
+    else:
+        log(f"{week}: F4_S3_BUCKET not set, files stay only on this machine")
+
+
+def upload_week(week_dir: Path, bucket: str) -> int:
+    """Copy every file of the week, unchanged, to bronze. Same key every time = idempotent."""
+    import boto3
+
+    s3 = boto3.client("s3", endpoint_url=os.getenv("S3_ENDPOINT_URL") or None)
+    n = 0
+    for path in sorted(p for p in week_dir.iterdir() if p.is_file()):
+        s3.upload_file(str(path), bucket, f"bronze/f4_agencias/semana={week_dir.name}/{path.name}")
+        n += 1
+    return n
 
 
 def next_run(now: datetime, weekday: int, hour: int) -> datetime:
