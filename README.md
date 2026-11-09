@@ -1,6 +1,6 @@
-# buenavista-csv
+# hospedaplus-csv
 
-Standalone repository for the file-based data sources (**F1** and **F4**) of the **HospedaPlus Revenue** platform (`US-5` & `US-6`), standardized against the shared platform reference catalog (`schemas/catalog.json`, **v1.1.0**). Decoupled from `buenavista-streaming` (F2), `buenavista-simulated-db` (F3), and `buenavista-api` (F5/F6/F7).
+Standalone repository for the file-based data sources (**F1** and **F4**) of the **HospedaPlus Revenue** platform (`US-5` & `US-6`), standardized against the shared platform reference catalog (`schemas/catalog.json`, **v1.1.0**). Decoupled from `buenavista-streaming` (F2), `db_simulated` (F3) and `api-reviews` (F5). F6 and F7 are public APIs extracted directly by `hospedaplus-pipeline`.
 
 ## 1. Data Sources Scope & Catalog v1.1.0 Alignment
 
@@ -9,10 +9,12 @@ Standalone repository for the file-based data sources (**F1** and **F4**) of the
 | **F1** | Hotel Booking Demand | Historical CSV | One-time / Backfill | 119,390 rows × 32 cols mapped to `HP-PT-001` (*City Hotel*, 207 rooms, `EUR`) & `HP-PT-002` (*Resort Hotel*, 171 rooms, `EUR`) | [Kaggle Dataset](https://www.kaggle.com/datasets/jessemostipak/hotel-booking-demand) (`CC BY 4.0`) |
 | **F4** | Traditional Agency Files | Simulated CSV / Excel, one file per agency and week | Weekly Batch | 15 agencies (`AG01`..`AG15`, `10%` commission), 28 hotels, room types (`SINGLE`, `DOUBLE`, `TWIN`, `SUITE`), currencies (`COP`, `MXN`, `BRL`, `EUR`, `USD`), guests `G-0000001`.. shared with F2/F3. Loaded into Neon through `operation.reservar()` | Synthetic generator (`seed=7`) |
 
+**Where each source goes.** F1: the pipeline DAG `bronze_f1_historical` downloads `data/f1_historical/hotel_bookings.csv` from this repo (raw GitHub URL, `main`) into `s3://<bucket>/bronze/f1_historical/`. F4: the `f4-weekly` service books every row in Neon with `operation.reservar('AGxx', ...)` and copies the raw files to `s3://<F4_S3_BUCKET>/bronze/f4_agencias/semana=<YYYY-Www>/`; the pipeline DAG `bronze_f4_agencias` (Monday 07:00 UTC) checks and registers them.
+
 ## 2. Repository Structure
 
 ```text
-buenavista-csv/
+hospedaplus-csv/
 ├── pyproject.toml                  # Package configuration & dependencies
 ├── .env.example                    # Environment variables template
 ├── schemas/
@@ -31,9 +33,12 @@ buenavista-csv/
 │   ├── f4_layouts.py               # The three agency formats + canonical reader
 │   ├── f4_generator.py             # F4 weekly CSV/Excel generator (US-25 / US-26)
 │   ├── f4_loader.py                # Books F4 rows in Neon via operation.reservar()
+│   ├── weekly.py                   # Weekly runner for docker compose: generate → validate → book → upload to S3
 │   └── validator.py                # Non-destructive batch quality validator (US-6)
 ├── output/                         # Generated audit, agency CSVs, and validation reports
 ├── tests/                          # Unit tests & malformed CSV fixtures (US-6 AC2)
+├── Dockerfile, docker-compose.yml  # f4-weekly service
+├── .github/workflows/cd.yml        # CI/CD: lint, image in GHCR, deploy to the sources EC2
 └── docs/data-sources/              # Full Docusaurus technical documentation
 ```
 
@@ -43,14 +48,14 @@ buenavista-csv/
 * **Package Manager:** `uv` (recommended) or `pip`
 
 ```bash
-git clone <repo-url>
-cd buenavista-csv
-uv sync --extra test --extra neon
+git clone https://github.com/HospedaPlus/hospedaplus-csv.git
+cd hospedaplus-csv
+uv sync --extra test --extra neon --extra s3
 ```
 
 ## 4. Usage & Validation Commands
 
-Run all commands from the root of `buenavista-csv`:
+Run all commands from the root of `hospedaplus-csv`:
 
 ```bash
 # 1. Profile F1 schema, PT season distribution, null tokens, and ADR outliers via IQR (US-11 / US-5)
@@ -69,18 +74,31 @@ NEON_DATABASE_URL=postgresql://app_writer:...@.../hospedaplus \
   uv run -m buenavista_csv.f4_loader --week-dir output/f4_agency_files/2026-W45
 
 # 5. Run automated unit tests
-uv run python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -v   # or: uv run pytest
 ```
 
 ### Run every week with Docker
 
 ```bash
-cp .env.example .env          # optional: NEON_READ_URL (etl_reader) and NEON_DATABASE_URL (app_writer)
+cp .env.example .env          # optional: NEON_READ_URL (etl_reader), NEON_DATABASE_URL (app_writer), F4_S3_BUCKET
 docker compose up -d --build
 docker compose logs -f f4-weekly
 ```
 
-The `f4-weekly` service generates, validates and (if `NEON_DATABASE_URL` is set) books the current week as soon as it starts, then again every Monday 06:00 UTC (`F4_RUN_WEEKDAY`, `F4_RUN_HOUR_UTC`). Files are written to `./output/f4_agency_files/<YYYY-Www>/` on the host. Restarting is safe: an existing week is not regenerated and `reservar()` is idempotent. Uploading to S3 is left to the Airflow pipeline.
+The `f4-weekly` service runs the current week as soon as it starts, then again every Monday 06:00 UTC (`F4_RUN_WEEKDAY`, `F4_RUN_HOUR_UTC`):
+
+1. generates the 15 agency files (unless the week already exists),
+2. validates them,
+3. books every row in Neon through `operation.reservar()` (only if `NEON_DATABASE_URL` is set),
+4. copies the raw files to `s3://<F4_S3_BUCKET>/bronze/f4_agencias/semana=<YYYY-Www>/` (only if `F4_S3_BUCKET` is set; on EC2 the instance role needs `s3:PutObject` on the bucket).
+
+Files are written to `./output/f4_agency_files/<YYYY-Www>/` on the host. Restarting is safe: an existing week is not regenerated and `reservar()` is idempotent. Generator settings come from `.env` (`F4_SEED`, `F4_BOOKINGS_PER_AGENCY`, `F4_DUPLICATE_RATE` or a fixed `F4_DUPLICATE_COUNT`, `F4_MISSING_CURRENCY_RATE`, `F4_WEEK`).
+
+### Deployment and CI/CD
+
+The service runs on the team's sources EC2 (Ubuntu, us-east-2, in `~/hospedaplus-csv`, next to F2 and F3) against Neon **production**: `docker compose up -d --build f4-weekly`.
+
+`.github/workflows/cd.yml` runs lint and builds the image on every PR; on merge to `main` (or a `vX.Y.Z` tag) it publishes `ghcr.io/hospedaplus/hospedaplus-csv` and deploys over SSH to the sources EC2 (`git pull --ff-only && docker compose up -d --build f4-weekly`). The deploy stays off until the secrets `DEPLOY_SSH_KEY` and `SOURCES_HOST` exist (`DEPLOY_SSH_USER` is optional, default `ubuntu`).
 
 ## 5. Key Outputs
 
